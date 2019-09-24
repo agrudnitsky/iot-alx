@@ -1,0 +1,9 @@
+/build/*
+/www/*
+
+/src/include/local_settings.h
+/sdkconfig.old
+
+/alx-app/dist
+/alx-app/node_modules
+/main/include/local_settings.h

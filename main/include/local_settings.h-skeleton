@@ -1,0 +1,8 @@
+#ifndef _LOCAL_SETTINGS_H_
+#define _LOCAL_SETTINGS_H_
+
+#define WIFI_SSID "myssid"
+#define WIFI_PASS "mypass"
+#define MYHOSTNAME "myhostname"
+
+#endif /* _LOCAL_SETTINGS_H_ */
