@@ -47,5 +47,5 @@ for my $srk (sort keys %sched_replacements) {
 }
 
 
-exit 1;
+exit 0;
 
