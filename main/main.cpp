@@ -136,7 +136,7 @@ void refresh_leds(CRGB color) {
 }
 
 
-void room_lights(void *pvParameters){
+void room_lights(void *arg){
 	int on_off_switch = 0;
 
 	while (1) {
@@ -252,7 +252,6 @@ void init_net() {
 	tcpip_adapter_set_hostname(TCPIP_ADAPTER_IF_STA, MYHOSTNAME);
 
 	ESP_LOGI(LOGTAG_WIFI, "init_net finished.");
-	ESP_LOGI(LOGTAG_WIFI, "connecting to AP SSID: %s, pass: %s", wifi_config.sta.ssid, wifi_config.sta.password);
 }
 
 
@@ -327,7 +326,10 @@ void app_main() {
 	init_timers();
 
 	start_rest_server(WEB_MOUNT_POINT);
+
+	/* House Keeping */
 	xTaskCreate(&house_keeper, "house_keeper", 2048, NULL, 4, NULL);
 
+	/* Light Controller - Core 1 */
 	xTaskCreatePinnedToCore(&room_lights, "room_lights", 4000, NULL, 5, NULL, 1);
 }
