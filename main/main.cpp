@@ -2,6 +2,7 @@
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <freertos/queue.h>
 #include <freertos/event_groups.h>
 
 #include <esp_system.h>
@@ -16,6 +17,7 @@
 
 #include <driver/gpio.h>
 #include <driver/adc.h>
+#include <driver/timer.h>
 
 #include <lwip/err.h>
 #include <lwip/sys.h>
@@ -34,7 +36,19 @@
 #define LOGTAG_WIFI "wifi"
 #define LOGTAG_MISC "misc"
 #define LOGTAG_LC "lc"
+#define LOGTAG_HK "hk"
 
+#define TIMER_DIVIDER 16
+#define TIMER_SCALE (TIMER_BASE_CLK/TIMER_DIVIDER)
+#define HKT_INTERVAL 5
+
+typedef struct {
+	timer_group_t group;
+	int id;
+	uint64_t counter_value;
+} timer_event_t;
+
+xQueueHandle timer_queue;
 
 esp_err_t start_rest_server(const char *base_path);
 
@@ -54,6 +68,8 @@ static int s_retry_num = 0;
 
 const char *version = VERSION;
 
+/* forward declarations */
+void reinit_net();
 
 extern "C" {
 	void app_main();
@@ -85,6 +101,29 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
 		xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
 	}
 }
+
+
+void IRAM_ATTR timer_group0_isr(void *par) {
+	int timer_id = (int)par;
+	timer_intr_t timer_intr = timer_group_intr_get_in_isr(TIMER_GROUP_0);
+	uint64_t timer_counter_value = timer_group_get_counter_value_in_isr(TIMER_GROUP_0, (timer_idx_t)timer_id);
+
+	timer_event_t ev;
+	ev.group = TIMER_GROUP_0;
+	ev.id = timer_id;
+	ev.counter_value = timer_counter_value;
+
+	if (timer_intr & TIMER_INTR_T0) {
+		timer_group_intr_clr_in_isr(TIMER_GROUP_0, TIMER_0);
+		timer_counter_value += (uint64_t)(HKT_INTERVAL * TIMER_SCALE);
+		timer_group_set_alarm_value_in_isr(TIMER_GROUP_0, TIMER_0, timer_counter_value);
+	}
+
+	timer_group_enable_alarm_in_isr(TIMER_GROUP_0, (timer_idx_t)timer_id);
+
+	xQueueSendFromISR(timer_queue, &ev, NULL);
+}
+
 
 void refresh_leds(CRGB color) {
 	for(int i = 0; i < NUM_LEDS; i++) {
@@ -139,6 +178,20 @@ void room_lights(void *pvParameters){
 }
 
 
+void house_keeper(void *arg) {
+	timer_event_t ev;
+	uint64_t timer_val;
+	wifi_ap_record_t ap_info;
+
+	while (1) {
+		xQueueReceive(timer_queue, &ev, portMAX_DELAY);
+		if (ESP_ERR_WIFI_NOT_CONNECT == esp_wifi_sta_get_ap_info(&ap_info)) {
+			reinit_net();
+		}
+	}
+}
+
+
 void init_lc(lc_state_t *lcs, lc_config_t *lcc) {
 	lcs->mode = CONSTANT;
 	lcs->brightness = 0;
@@ -156,6 +209,16 @@ void init_lc(lc_state_t *lcs, lc_config_t *lcc) {
 
 void init_io() {
 	gpio_set_direction(GPIO_NUM_32, GPIO_MODE_INPUT);
+}
+
+
+void reinit_net() {
+	ESP_ERROR_CHECK(esp_wifi_stop());
+	s_retry_num = 0;
+	ESP_ERROR_CHECK(esp_wifi_start());
+	tcpip_adapter_set_hostname(TCPIP_ADAPTER_IF_STA, MYHOSTNAME);
+
+	ESP_LOGI(LOGTAG_WIFI, "wifi reinit.");
 }
 
 
@@ -225,6 +288,25 @@ esp_err_t init_fs(void)
 }
 
 
+void init_timers() {
+	timer_config_t conf;
+
+	timer_queue = xQueueCreate(10, sizeof(timer_event_t));
+	conf.divider = TIMER_DIVIDER;
+	conf.counter_dir = TIMER_COUNT_UP;
+	conf.counter_en = TIMER_PAUSE;
+	conf.alarm_en = TIMER_ALARM_EN;
+	conf.intr_type = TIMER_INTR_LEVEL;
+	conf.auto_reload = TIMER_AUTORELOAD_EN;
+
+	timer_init(TIMER_GROUP_0, TIMER_0, &conf);
+	timer_set_counter_value(TIMER_GROUP_0, TIMER_0, 0);
+	timer_set_alarm_value(TIMER_GROUP_0, TIMER_0, HKT_INTERVAL*TIMER_SCALE);
+	timer_enable_intr(TIMER_GROUP_0, TIMER_0);
+	timer_isr_register(TIMER_GROUP_0, TIMER_0, timer_group0_isr, (void *) TIMER_0, ESP_INTR_FLAG_IRAM, NULL);
+	timer_start(TIMER_GROUP_0, TIMER_0);
+}
+
 
 void app_main() {
 	FastLED.addLeds<LED_TYPE, DATA_PIN, COLOR_ORDER>(leds, NUM_LEDS);
@@ -242,7 +324,10 @@ void app_main() {
 	init_io();
 	init_net();
 	init_fs();
+	init_timers();
 
 	start_rest_server(WEB_MOUNT_POINT);
+	xTaskCreate(&house_keeper, "house_keeper", 2048, NULL, 4, NULL);
+
 	xTaskCreatePinnedToCore(&room_lights, "room_lights", 4000, NULL, 5, NULL, 1);
 }
