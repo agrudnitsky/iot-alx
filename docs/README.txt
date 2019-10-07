@@ -13,6 +13,7 @@ $ cp src/include/local_settings.h-skeleton src/include/local_settings.h
 
 edit and modify src/include/local_settings.h
 
+$ export FASTLED_DIR=/path/to/components_dir_with_fastLED-idf_directory/
 $ idf.py build
 $ cd alx-app
 $ npm run build
