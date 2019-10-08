@@ -1,8 +1,18 @@
 #ifndef _LOCAL_SETTINGS_H_
 #define _LOCAL_SETTINGS_H_
 
+
+/* Network */
 #define WIFI_SSID "myssid"
 #define WIFI_PASS "mypass"
 #define MYHOSTNAME "myhostname"
+
+
+/* Hardware */
+#define NUM_LEDS 121
+#define DATA_PIN 15 
+#define LED_TYPE    WS2812B
+#define COLOR_ORDER GRB
+
 
 #endif /* _LOCAL_SETTINGS_H_ */

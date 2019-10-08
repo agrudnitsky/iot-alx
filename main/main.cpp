@@ -1,55 +1,9 @@
-#include <stdio.h>
-
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
-#include <freertos/queue.h>
-#include <freertos/event_groups.h>
-
-#include <esp_system.h>
-#include <esp_spi_flash.h>
-#include <esp_wifi.h>
-#include <esp_event.h>
-#include <esp_log.h>
-#include <nvs_flash.h>
-#include <esp_spiffs.h>
-
-#include <FastLED.h>
-
-#include <driver/gpio.h>
-#include <driver/adc.h>
-#include <driver/timer.h>
-
-#include <lwip/err.h>
-#include <lwip/sys.h>
-
 #include "alx.h"
+#include "alx_types.h"
 #include "local_settings.h"
 
 
-#define NUM_LEDS 121
-#define DATA_PIN 15 
-#define LED_TYPE    WS2812B
-#define COLOR_ORDER GRB
-
-#define WIFI_MAXIMUM_RETRY 2
-#define WEB_MOUNT_POINT "/www"
-#define LOGTAG_WIFI "wifi"
-#define LOGTAG_MISC "misc"
-#define LOGTAG_LC "lc"
-#define LOGTAG_HK "hk"
-
-#define TIMER_DIVIDER 16
-#define TIMER_SCALE (TIMER_BASE_CLK/TIMER_DIVIDER)
-#define HKT_INTERVAL 5
-
-typedef struct {
-	timer_group_t group;
-	int id;
-	uint64_t counter_value;
-} timer_event_t;
-
 xQueueHandle timer_queue;
-
 
 CRGB leds[NUM_LEDS];
 CRGB color_schedule[] = {CRGB::OrangeRed, CRGB::FloralWhite, CRGB::DeepPink};
@@ -63,10 +17,6 @@ static int WIFI_CONNECTED_BIT = BIT0;
 static int s_retry_num = 0;
 
 const char *version = VERSION;
-
-/* forward declarations */
-void reinit_net();
-esp_err_t start_rest_server(const char *base_path, int core_id);
 
 
 extern "C" {

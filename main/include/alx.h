@@ -1,22 +1,56 @@
 #ifndef _ALX_H_
 #define _ALX_H_
 
-enum lc_mode {CONSTANT, FADE_UP, FADE_DOWN, LIGHTS_OFF, LIGHTS_POWER_DOWN, LIGHTS_POWER_UP};
+
+#include <stdio.h>
+
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/queue.h>
+#include <freertos/event_groups.h>
+
+#include <esp_system.h>
+#include <esp_spi_flash.h>
+#include <esp_wifi.h>
+#include <esp_event.h>
+#include <esp_log.h>
+#include <nvs_flash.h>
+#include <esp_spiffs.h>
+
+#include <FastLED.h>
+
+#include <driver/gpio.h>
+#include <driver/adc.h>
+#include <driver/timer.h>
+
+#include <lwip/err.h>
+#include <lwip/sys.h>
+
+
+#define WIFI_MAXIMUM_RETRY 2
+#define WEB_MOUNT_POINT "/www"
+#define LOGTAG_WIFI "wifi"
+#define LOGTAG_MISC "misc"
+#define LOGTAG_LC "lc"
+#define LOGTAG_HK "hk"
+
+#define TIMER_DIVIDER 16
+#define TIMER_SCALE (TIMER_BASE_CLK/TIMER_DIVIDER)
+#define HKT_INTERVAL 5
+
+
+
 
 typedef struct {
-	lc_mode mode;
-	int brightness;
-	int scheduled_color;
-	int on_off_switch;
-} lc_state_t;
+	timer_group_t group;
+	int id;
+	uint64_t counter_value;
+} timer_event_t;
 
-typedef struct {
-	lc_mode set_mode;
-	int color;
-	int set_bright;
-	int max_bright;
-	int min_bright;
-	int refresh_delay;
-} lc_config_t;
+
+/* forward declarations */
+void reinit_net();
+esp_err_t start_rest_server(const char *base_path, int core_id);
+
 
 #endif /* _ALX_H_ */

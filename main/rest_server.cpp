@@ -13,7 +13,8 @@
 #include "esp_log.h"
 #include "esp_vfs.h"
 #include "cJSON.h"
-#include "alx.h"
+
+#include "alx_types.h"
 
 extern lc_config_t lc_config;
 extern int color_schedule_size;
