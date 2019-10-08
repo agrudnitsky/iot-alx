@@ -4,7 +4,7 @@ execute_process(COMMAND sh "-c" "cat ../VERSION.txt | tr -d '\n'" OUTPUT_VARIABL
 
 idf_component_register(SRCS "main.cpp" "rest_server.cpp"
 			INCLUDE_DIRS "include"
-			REQUIRES FastLED-idf esp_http_server spiffs json)
+			REQUIRES FastLED-idf nvs_flash esp_http_server spiffs json)
 
 set_source_files_properties(rest_server.cpp
 			PROPERTIES COMPILE_FLAGS

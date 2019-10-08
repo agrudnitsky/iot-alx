@@ -50,8 +50,6 @@ typedef struct {
 
 xQueueHandle timer_queue;
 
-esp_err_t start_rest_server(const char *base_path);
-
 
 CRGB leds[NUM_LEDS];
 CRGB color_schedule[] = {CRGB::OrangeRed, CRGB::FloralWhite, CRGB::DeepPink};
@@ -59,8 +57,6 @@ int color_schedule_size = sizeof(color_schedule)/sizeof(color_schedule[0]);
 
 lc_state_t lc_state;
 lc_config_t lc_config;
-
-portMUX_TYPE lc_mutex = portMUX_INITIALIZER_UNLOCKED;
 
 static EventGroupHandle_t s_wifi_event_group;
 static int WIFI_CONNECTED_BIT = BIT0;
@@ -70,6 +66,8 @@ const char *version = VERSION;
 
 /* forward declarations */
 void reinit_net();
+esp_err_t start_rest_server(const char *base_path, int core_id);
+
 
 extern "C" {
 	void app_main();
@@ -129,15 +127,17 @@ void refresh_leds(CRGB color) {
 	for(int i = 0; i < NUM_LEDS; i++) {
 		leds[i] = color;
 	}
-//	taskENTER_CRITICAL(&lc_mutex);
 	FastLED.show();
-//	taskEXIT_CRITICAL(&lc_mutex);
 	FastLED.delay(lc_config.refresh_delay);
 }
 
 
 void room_lights(void *arg){
 	int on_off_switch = 0;
+
+	FastLED.addLeds<LED_TYPE, DATA_PIN, COLOR_ORDER>(leds, NUM_LEDS);
+	FastLED.setMaxPowerInVoltsAndMilliamps(5,3000);
+	FastLED.setCorrection(TypicalSMD5050);
 
 	while (1) {
 		switch (lc_state.mode) {
@@ -161,7 +161,7 @@ void room_lights(void *arg){
 		if (lc_state.brightness < 0) lc_state.brightness = lc_config.set_bright;
 
 		FastLED.setBrightness(lc_state.brightness);
-		/*if (lc_state.mode != CONSTANT) */refresh_leds(color_schedule[lc_state.scheduled_color]);
+		refresh_leds(color_schedule[lc_state.scheduled_color]);
 
 		on_off_switch = gpio_get_level(GPIO_NUM_32);
 		if (!on_off_switch && lc_state.on_off_switch) {
@@ -180,7 +180,6 @@ void room_lights(void *arg){
 
 void house_keeper(void *arg) {
 	timer_event_t ev;
-	uint64_t timer_val;
 	wifi_ap_record_t ap_info;
 
 	while (1) {
@@ -308,10 +307,6 @@ void init_timers() {
 
 
 void app_main() {
-	FastLED.addLeds<LED_TYPE, DATA_PIN, COLOR_ORDER>(leds, NUM_LEDS);
-	FastLED.setMaxPowerInVoltsAndMilliamps(5,3000);
-	FastLED.setCorrection(TypicalSMD5050);
-
 	esp_err_t ret = nvs_flash_init();
 	if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
 		ESP_ERROR_CHECK(nvs_flash_erase());
@@ -325,10 +320,11 @@ void app_main() {
 	init_fs();
 	init_timers();
 
-	start_rest_server(WEB_MOUNT_POINT);
+	/* REST server - Core 0 */
+	start_rest_server(WEB_MOUNT_POINT, 0);
 
-	/* House Keeping */
-	xTaskCreate(&house_keeper, "house_keeper", 2048, NULL, 4, NULL);
+	/* House Keeping - Core 0 */
+	xTaskCreatePinnedToCore(&house_keeper, "house_keeper", 2048, NULL, 4, NULL, 0);
 
 	/* Light Controller - Core 1 */
 	xTaskCreatePinnedToCore(&room_lights, "room_lights", 4000, NULL, 5, NULL, 1);

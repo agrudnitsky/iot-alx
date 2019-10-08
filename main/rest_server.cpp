@@ -177,8 +177,7 @@ static esp_err_t temperature_data_get_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-esp_err_t start_rest_server(const char *base_path)
-{
+esp_err_t start_rest_server(const char *base_path, int core_id) {
     REST_CHECK(base_path, "wrong base path", err);
     rest_server_context_t *rest_context = calloc(1, sizeof(rest_server_context_t));
     REST_CHECK(rest_context, "No memory for rest context", err);
@@ -187,6 +186,7 @@ esp_err_t start_rest_server(const char *base_path)
     httpd_handle_t server = NULL;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.uri_match_fn = httpd_uri_match_wildcard;
+    config.core_id = core_id;
 
     ESP_LOGI(REST_TAG, "Starting HTTP Server");
     REST_CHECK(httpd_start(&server, &config) == ESP_OK, "Start server failed", err_start);
