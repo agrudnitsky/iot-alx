@@ -4,20 +4,28 @@
     <v-container>
       <v-row>
         <v-col>
-          <v-card><v-btn tile color="orange" v-on:click="set_color(0)">0</v-btn></v-card>
+          <v-card><v-btn tile color="#FF4500" v-on:click="set_color(0)"></v-btn></v-card>
         </v-col>
         <v-col>
-          <v-card><v-btn tile color="white" v-on:click="set_color(1)">1</v-btn></v-card>
+          <v-card><v-btn tile color="#FFFAF0" v-on:click="set_color(1)"></v-btn></v-card>
         </v-col>
         <v-col>
-          <v-card><v-btn tile color="purple" v-on:click="set_color(2)">2</v-btn></v-card>
+          <v-card><v-btn tile color="#FF1493" v-on:click="set_color(2)"></v-btn></v-card>
+        </v-col>
+      </v-row>
+      <v-row>
+        <v-col>
+          <v-card><v-btn tile color="#00FF7F" v-on:click="set_color(3)"></v-btn></v-card>
+        </v-col>
+        <v-col>
+          <v-card><v-btn tile color="#0000CD" v-on:click="set_color(4)"></v-btn></v-card>
+        </v-col>
+        <v-col>
+          <v-card><v-btn tile color="#4B0082" v-on:click="set_color(5)"></v-btn></v-card>
         </v-col>
       </v-row>
     </v-container>
     <v-slider v-model="brightness" :max="255" label="Brightness" min-width="510" v-on:change="update_lc_config"></v-slider>
-    <v-btn fab dark large color="red accent-4" @click="update_lc_config">
-      <v-icon dark>mdi-send</v-icon>
-    </v-btn>
    </v-card>
   </v-app>
 </template>

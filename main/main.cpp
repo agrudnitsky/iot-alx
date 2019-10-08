@@ -6,7 +6,11 @@
 xQueueHandle timer_queue;
 
 CRGB leds[NUM_LEDS];
-CRGB color_schedule[] = {CRGB::OrangeRed, CRGB::FloralWhite, CRGB::DeepPink};
+
+CRGB color_schedule[] = {
+	CRGB::OrangeRed, CRGB::FloralWhite, CRGB::DeepPink,
+	CRGB::SpringGreen, CRGB::MediumBlue, CRGB::Indigo
+};
 int color_schedule_size = sizeof(color_schedule)/sizeof(color_schedule[0]);
 
 lc_state_t lc_state;
