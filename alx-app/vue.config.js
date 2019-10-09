@@ -6,4 +6,5 @@ module.exports = {
       new VuetifyLoaderPlugin()
     ],
   },
+  productionSourceMap: false,
 }
