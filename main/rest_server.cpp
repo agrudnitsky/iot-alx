@@ -14,10 +14,12 @@
 #include "esp_vfs.h"
 #include "cJSON.h"
 
+#include <FastLED.h>
 #include "alx_types.h"
 
 extern lc_config_t lc_config;
 extern int color_schedule_size;
+extern CRGB color_schedule[];
 
 static const char *REST_TAG = "esp-rest";
 #define REST_CHECK(a, str, goto_tag, ...)                                              \
@@ -110,7 +112,7 @@ static esp_err_t rest_common_get_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-/* Simple handler for light brightness control */
+/* handler for lc config */
 static esp_err_t lc_config_post_handler(httpd_req_t *req)
 {
     int total_len = req->content_len;
@@ -148,6 +150,50 @@ static esp_err_t lc_config_post_handler(httpd_req_t *req)
     httpd_resp_sendstr(req, "Post control value successfully");
     return ESP_OK;
 }
+
+
+
+/* handler for updating color definition */
+static esp_err_t lc_coldef_post_handler(httpd_req_t *req)
+{
+	int col_r, col_g, col_b;
+    int total_len = req->content_len;
+    int cur_len = 0;
+    char *buf = ((rest_server_context_t *)(req->user_ctx))->scratch;
+    int received = 0;
+    if (total_len >= SCRATCH_BUFSIZE) {
+        /* Respond with 500 Internal Server Error */
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "content too long");
+        return ESP_FAIL;
+    }
+    while (cur_len < total_len) {
+        received = httpd_req_recv(req, buf + cur_len, total_len);
+        if (received <= 0) {
+            /* Respond with 500 Internal Server Error */
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to post control value");
+            return ESP_FAIL;
+        }
+        cur_len += received;
+    }
+    buf[total_len] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    int color_id = cJSON_GetObjectItem(root, "color_id")->valueint;
+    char *hexcolor = cJSON_GetObjectItem(root, "hexvalue")->valuestring;
+    if (3 != sscanf(hexcolor, "#%2X%2X%2X", &col_r, &col_g, &col_b) || color_id > color_schedule_size) {
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Invalid color definition");
+            return ESP_FAIL;
+    }
+
+    color_schedule[color_id].r = col_r;
+    color_schedule[color_id].g = col_g;
+    color_schedule[color_id].b = col_b;
+    ESP_LOGI(REST_TAG, "LC coldef: color = %d,%d,%d, color_id = %d", col_r, col_g, col_b, color_id);
+    cJSON_Delete(root);
+    httpd_resp_sendstr(req, "Post control value successfully");
+    return ESP_OK;
+}
+
 
 /* Simple handler for getting system handler */
 static esp_err_t system_info_get_handler(httpd_req_t *req)
@@ -218,6 +264,15 @@ esp_err_t start_rest_server(const char *base_path, int core_id) {
         .user_ctx = rest_context
     };
     httpd_register_uri_handler(server, &lc_config_post_uri);
+
+    /* URI handler for updating color definition */
+    httpd_uri_t lc_coldef_post_uri = {
+        .uri = "/api/v1/lc/coldef",
+        .method = HTTP_POST,
+        .handler = lc_coldef_post_handler,
+        .user_ctx = rest_context
+    };
+    httpd_register_uri_handler(server, &lc_coldef_post_uri);
 
     /* URI handler for getting web server files */
     httpd_uri_t common_get_uri = {
