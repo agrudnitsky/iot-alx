@@ -21,4 +21,7 @@ typedef struct {
 } lc_config_t;
 
 
+/* forward declarations */
+void nvs_update_config(const char *nvs_namespace, const char *key, int val);
+
 #endif

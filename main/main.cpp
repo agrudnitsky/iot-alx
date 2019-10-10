@@ -149,14 +149,46 @@ void init_lc(lc_state_t *lcs, lc_config_t *lcc) {
 	lcs->mode = CONSTANT;
 	lcs->brightness = 0;
 	lcs->scheduled_color = 0;
-	lcs->on_off_switch = gpio_get_level(GPIO_NUM_32);
 
-	lcc->refresh_delay = 20;
+	lcc->set_bright = 90;
 	lcc->color = 0;
+	lcc->refresh_delay = 20;
 	lcc->max_bright = 254;
 	lcc->min_bright = 0;
-	lcc->set_bright = 90;
 	lcc->set_mode = CONSTANT;
+
+	lcs->on_off_switch = gpio_get_level(GPIO_NUM_32);
+
+	nvs_handle_t nvsh_load;
+	esp_err_t err = nvs_open("alx.lcc", NVS_READONLY, &nvsh_load);
+	if (ESP_OK != err) {
+		ESP_LOGW(LOGTAG_MISC, "failed opening nvs for loading");
+		return;
+	}
+	nvs_get_i32(nvsh_load, "set_bright", &(lcc->set_bright));
+	nvs_get_i32(nvsh_load, "color", &(lcc->color));
+	nvs_close(nvsh_load);
+}
+
+
+void nvs_update_config(const char *nvs_namespace, const char *key, int val) {
+	nvs_handle_t nvsh_update;
+	nvs_open(nvs_namespace, NVS_READWRITE, &nvsh_update);
+	nvs_set_i32(nvsh_update, key, val);
+	nvs_commit(nvsh_update);
+	nvs_close(nvsh_update);
+}
+
+
+void nvs_lc_init() {
+	/* write default values to nvs */
+	nvs_handle_t nvsh_write;
+	ESP_ERROR_CHECK(nvs_open("alx.lcc", NVS_READWRITE, &nvsh_write));
+	nvs_set_i32(nvsh_write, "set_bright", 90);
+	nvs_set_i32(nvsh_write, "color", 0);
+	nvs_set_i32(nvsh_write, "set_mode", CONSTANT);
+	nvs_commit(nvsh_write);
+	nvs_close(nvsh_write);
 }
 
 
@@ -265,12 +297,17 @@ void app_main() {
 	if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
 		ESP_ERROR_CHECK(nvs_flash_erase());
 		ret = nvs_flash_init();
+		nvs_lc_init();
 	}
 	ESP_ERROR_CHECK(ret);
 
-	init_lc(&lc_state, &lc_config);
 	init_io();
 	init_net();
+	/* XXX: for some reason we have to init wifi
+	 * before we screw around with NVS,
+	 * even with nvs_enabled = 0 in wifi config
+	 */
+	init_lc(&lc_state, &lc_config);
 	init_fs();
 	init_timers();
 

@@ -50,6 +50,7 @@ typedef struct {
 
 /* forward declarations */
 void reinit_net();
+void init_net();
 esp_err_t start_rest_server(const char *base_path, int core_id);
 
 

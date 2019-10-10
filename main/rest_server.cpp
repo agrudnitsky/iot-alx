@@ -148,6 +148,10 @@ static esp_err_t lc_config_post_handler(httpd_req_t *req)
     ESP_LOGI(REST_TAG, "LC config: brightness = %d, color_id = %d", brightness, color_id);
     cJSON_Delete(root);
     httpd_resp_sendstr(req, "Post control value successfully");
+
+    /* store new values to NVS */
+    nvs_update_config("alx.lcc", "set_bright", brightness);
+    nvs_update_config("alx.lcc", "color", color_id);
     return ESP_OK;
 }
 
