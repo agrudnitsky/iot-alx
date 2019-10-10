@@ -152,6 +152,51 @@ static esp_err_t lc_config_post_handler(httpd_req_t *req)
 }
 
 
+/* handler for getting colors */
+static esp_err_t lc_cols_get_handler(httpd_req_t *req)
+{
+	char hexcol[8];
+	int i;
+
+    httpd_resp_set_type(req, "application/json");
+    cJSON *root = cJSON_CreateObject();
+
+    cJSON *cols = cJSON_CreateArray();
+    if (NULL == cols) {
+	    return ESP_FAIL;
+    }
+
+    cJSON_AddItemToObject(root, "cols", cols);
+
+    for (i = 0; i < color_schedule_size; ++i) {
+	    sprintf(hexcol, "#%02X%02X%02X", color_schedule[i].r, color_schedule[i].g, color_schedule[i].b);
+	    cJSON_AddItemToArray(cols, cJSON_CreateString(hexcol));
+    }
+
+    const char *cols_json = cJSON_Print(root);
+    httpd_resp_sendstr(req, cols_json);
+    free((void *)cols_json);
+    cJSON_Delete(root);
+    return ESP_OK;
+}
+
+
+/* handler for getting light controller config */
+static esp_err_t lc_config_get_handler(httpd_req_t *req)
+{
+    httpd_resp_set_type(req, "application/json");
+    cJSON *root = cJSON_CreateObject();
+
+    cJSON_AddNumberToObject(root, "brightness", lc_config.set_bright);
+    cJSON_AddNumberToObject(root, "color", lc_config.color);
+
+    const char *conf_json = cJSON_Print(root);
+    httpd_resp_sendstr(req, conf_json);
+    free((void *)conf_json);
+    cJSON_Delete(root);
+    return ESP_OK;
+}
+
 
 /* handler for updating color definition */
 static esp_err_t lc_coldef_post_handler(httpd_req_t *req)
@@ -256,14 +301,34 @@ esp_err_t start_rest_server(const char *base_path, int core_id) {
     };
     httpd_register_uri_handler(server, &temperature_data_get_uri);
 
-    /* URI handler for light brightness control */
+
+    /* URI handler for getting light controller config */
+    httpd_uri_t lc_config_get_uri = {
+        .uri = "/api/v1/lc/getconfig",
+        .method = HTTP_GET,
+        .handler = lc_config_get_handler,
+        .user_ctx = rest_context
+    };
+    httpd_register_uri_handler(server, &lc_config_get_uri);
+
+    /* URI handler for light controller config */
     httpd_uri_t lc_config_post_uri = {
-        .uri = "/api/v1/lc/config",
+        .uri = "/api/v1/lc/setconfig",
         .method = HTTP_POST,
         .handler = lc_config_post_handler,
         .user_ctx = rest_context
     };
     httpd_register_uri_handler(server, &lc_config_post_uri);
+
+    /* URI handler for updating color definition */
+    httpd_uri_t lc_cols_get_uri = {
+        .uri = "/api/v1/lc/getcols",
+        .method = HTTP_GET,
+        .handler = lc_cols_get_handler,
+        .user_ctx = rest_context
+    };
+    httpd_register_uri_handler(server, &lc_cols_get_uri);
+
 
     /* URI handler for updating color definition */
     httpd_uri_t lc_coldef_post_uri = {
