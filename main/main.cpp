@@ -90,7 +90,7 @@ void room_lights(void *arg){
 	int on_off_switch = 0;
 
 	FastLED.addLeds<LED_TYPE, DATA_PIN, COLOR_ORDER>(leds, NUM_LEDS);
-	FastLED.setMaxPowerInVoltsAndMilliamps(5,3000);
+	FastLED.setMaxPowerInVoltsAndMilliamps(5,3500);
 	FastLED.setCorrection(TypicalSMD5050);
 
 	while (1) {
