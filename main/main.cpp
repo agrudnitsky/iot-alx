@@ -159,14 +159,30 @@ void init_lc(lc_state_t *lcs, lc_config_t *lcc) {
 
 	lcs->on_off_switch = gpio_get_level(GPIO_NUM_32);
 
+	/* load config from NVS */
 	nvs_handle_t nvsh_load;
+	char key[8];
+	int i;
+	uint32_t colval;
 	esp_err_t err = nvs_open("alx.lcc", NVS_READONLY, &nvsh_load);
 	if (ESP_OK != err) {
 		ESP_LOGW(LOGTAG_MISC, "failed opening nvs for loading");
 		return;
 	}
+	/* config */
 	nvs_get_i32(nvsh_load, "set_bright", &(lcc->set_bright));
 	nvs_get_i32(nvsh_load, "color", &(lcc->color));
+
+	/* color definitions */
+	for (i = 0; i < color_schedule_size; ++i) {
+		sprintf(key, "col.%03u", i);
+		if (ESP_OK == nvs_get_u32(nvsh_load, key, &colval)) {
+			color_schedule[i].r = (0x00FF0000 & colval) >> 16;
+			color_schedule[i].g = (0x0000FF00 & colval) >> 8;
+			color_schedule[i].b = 0x000000FF & colval;
+		}
+	}
+
 	nvs_close(nvsh_load);
 }
 
@@ -175,6 +191,21 @@ void nvs_update_config(const char *nvs_namespace, const char *key, int val) {
 	nvs_handle_t nvsh_update;
 	nvs_open(nvs_namespace, NVS_READWRITE, &nvsh_update);
 	nvs_set_i32(nvsh_update, key, val);
+	nvs_commit(nvsh_update);
+	nvs_close(nvsh_update);
+}
+
+
+void nvs_update_coldef(const char *nvs_namespace, int color_id) {
+	uint32_t storeval = (color_schedule[color_id].r << 16) | (color_schedule[color_id].g << 8) | color_schedule[color_id].b;
+	nvs_handle_t nvsh_update;
+	char key[8];
+
+	sprintf(key, "col.%03u", color_id);
+
+	nvs_open(nvs_namespace, NVS_READWRITE, &nvsh_update);
+
+	nvs_set_u32(nvsh_update, key, storeval);
 	nvs_commit(nvsh_update);
 	nvs_close(nvsh_update);
 }

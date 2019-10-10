@@ -240,6 +240,9 @@ static esp_err_t lc_coldef_post_handler(httpd_req_t *req)
     ESP_LOGI(REST_TAG, "LC coldef: color = %d,%d,%d, color_id = %d", col_r, col_g, col_b, color_id);
     cJSON_Delete(root);
     httpd_resp_sendstr(req, "Post control value successfully");
+
+    nvs_update_coldef("alx.lcc", color_id);
+
     return ESP_OK;
 }
 

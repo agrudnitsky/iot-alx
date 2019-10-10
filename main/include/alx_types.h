@@ -23,5 +23,6 @@ typedef struct {
 
 /* forward declarations */
 void nvs_update_config(const char *nvs_namespace, const char *key, int val);
+void nvs_update_coldef(const char *nvs_namespace, int color_id);
 
 #endif
