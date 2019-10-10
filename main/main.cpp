@@ -19,6 +19,7 @@ lc_config_t lc_config;
 static EventGroupHandle_t s_wifi_event_group;
 static int WIFI_CONNECTED_BIT = BIT0;
 static int s_retry_num = 0;
+static int net_startup = 1;
 
 const char *version = VERSION;
 
@@ -229,12 +230,21 @@ void init_io() {
 
 
 void reinit_net() {
+	/* TODO: This doesn't seem to work
+	 * -> force reinit for debugging purposes a few seconds after start
+	 * and observe what happens
+	 */
+	ESP_LOGI(LOGTAG_WIFI, "wifi reinit.");
+
 	ESP_ERROR_CHECK(esp_wifi_stop());
 	s_retry_num = 0;
-	ESP_ERROR_CHECK(esp_wifi_start());
 	tcpip_adapter_set_hostname(TCPIP_ADAPTER_IF_STA, MYHOSTNAME);
+	esp_event_handler_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler);
+	esp_event_handler_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler);
+	esp_wifi_deinit();
+	vEventGroupDelete(s_wifi_event_group);
 
-	ESP_LOGI(LOGTAG_WIFI, "wifi reinit.");
+	init_net();
 }
 
 
@@ -245,11 +255,15 @@ void init_net() {
 	/* Init WIFI */
 	s_wifi_event_group = xEventGroupCreate();
 
-	tcpip_adapter_init();
+	if (net_startup) {
+		tcpip_adapter_init();
+		ESP_ERROR_CHECK(esp_event_loop_create_default());
+	}
 
-	ESP_ERROR_CHECK(esp_event_loop_create_default());
 
 	wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+	cfg.nvs_enable = 0;
+
 	ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
 	ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler, NULL));
@@ -266,6 +280,8 @@ void init_net() {
 	ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config));
 	ESP_ERROR_CHECK(esp_wifi_start());
 	tcpip_adapter_set_hostname(TCPIP_ADAPTER_IF_STA, MYHOSTNAME);
+
+	net_startup = 0;
 
 	ESP_LOGI(LOGTAG_WIFI, "init_net finished.");
 }
