@@ -8,24 +8,24 @@
     <v-container>
       <v-row>
         <v-col>
-          <v-card><v-btn tile id="color-tile-0" v-bind:color="colors[0]" v-on:click="cb_action(0)"></v-btn></v-card>
+          <v-card v-bind:raised="color_id==0"><v-btn tile id="color-tile-0" v-bind:color="colors[0]" v-on:click="cb_action(0)"></v-btn></v-card>
         </v-col>
         <v-col>
-          <v-card><v-btn tile id="color-tile-1" v-bind:color="colors[1]" v-on:click="cb_action(1)"></v-btn></v-card>
+          <v-card v-bind:raised="color_id==1"><v-btn tile id="color-tile-1" v-bind:color="colors[1]" v-on:click="cb_action(1)"></v-btn></v-card>
         </v-col>
         <v-col>
-          <v-card><v-btn tile id="color-tile-2" v-bind:color="colors[2]" v-on:click="cb_action(2)"></v-btn></v-card>
+          <v-card v-bind:raised="color_id==2"><v-btn tile id="color-tile-2" v-bind:color="colors[2]" v-on:click="cb_action(2)"></v-btn></v-card>
         </v-col>
       </v-row>
       <v-row>
         <v-col>
-          <v-card><v-btn tile id="color-tile-3" v-bind:color="colors[3]" v-on:click="cb_action(3)"></v-btn></v-card>
+          <v-card v-bind:raised="color_id==3"><v-btn tile id="color-tile-3" v-bind:color="colors[3]" v-on:click="cb_action(3)"></v-btn></v-card>
         </v-col>
         <v-col>
-          <v-card><v-btn tile id="color-tile-4" v-bind:color="colors[4]" v-on:click="cb_action(4)"></v-btn></v-card>
+          <v-card v-bind:raised="color_id==4"><v-btn tile id="color-tile-4" v-bind:color="colors[4]" v-on:click="cb_action(4)"></v-btn></v-card>
         </v-col>
         <v-col>
-          <v-card><v-btn tile id="color-tile-5" v-bind:color="colors[5]" v-on:click="cb_action(5)"></v-btn></v-card>
+          <v-card v-bind:raised="color_id==5"><v-btn tile id="color-tile-5" v-bind:color="colors[5]" v-on:click="cb_action(5)"></v-btn></v-card>
         </v-col>
      </v-row>
     </v-container>
@@ -60,12 +60,11 @@ export default {
   name: 'app',
   data: () => ({
       brightness: 90,
-      color_selector: 0,
+      color_id: 0,
       remote_onoff: 1,
       settings_icon: mdiWrench,
       remote_onoff_icon: mdiLightbulbOn,
       edit_mode: false,
-      setting_color: 0,
       show_color_picker: false,
       color_definition: {hex: '#194d3FF'},
       colors: ["#FF4500", "#FFFAF0", "#FF1493", "#00FF7F", "#0000CD", "#4B0082"]
@@ -78,7 +77,7 @@ export default {
       .get("/api/v1/lc/getconfig")
       .then(response => {
         this.brightness = response.data.brightness,
-        this.color_selector = response.data.color,
+        this.color_id = response.data.color,
         this.remote_onoff = response.data.remote_onoff,
         this.remote_onoff_icon = response.data.remote_onoff ? mdiLightbulbOn : mdiLightbulb
        })
@@ -92,7 +91,7 @@ export default {
     update_lc_config: function() {
       this.axios.post("/api/v1/lc/setconfig", {
           brightness: this.brightness,
-          color_id: this.color_selector,
+          color_id: this.color_id,
           remote_onoff: this.remote_onoff
         })
         .then(data => {
@@ -104,8 +103,8 @@ export default {
     },
     update_color_definition: function() {
       this.axios.post("/api/v1/lc/coldef", {
-          hexvalue: this.colors[this.setting_color],
-          color_id: this.setting_color
+          hexvalue: this.colors[this.color_id],
+          color_id: this.color_id
         })
         .then(data => {
           console.log(data);
@@ -122,16 +121,16 @@ export default {
       }
     },
     set_color: function(val) {
-      this.color_selector = val;
+      this.color_id = val;
       this.update_lc_config();
     },
     edit_color: function(val) {
-      this.setting_color = val;
+      this.color_id = val;
       this.color_definition = {hex: this.colors[val]};
       this.show_color_picker = true;
     },
     color_picker_OK: function() {
-      this.colors[this.setting_color] = this.color_definition.hex;
+      this.colors[this.color_id] = this.color_definition.hex;
       this.update_color_definition();
       this.show_color_picker = false;
     },
