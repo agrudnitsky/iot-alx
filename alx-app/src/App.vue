@@ -6,28 +6,11 @@
    <v-col justify-self="end">
    <v-card class="mx-auto" min-width="350">
     <v-container>
-      <v-row>
-        <v-col>
-          <v-card v-bind:raised="color_id==0"><v-btn tile id="color-tile-0" v-bind:color="colors[0]" v-on:click="cb_action(0)"></v-btn></v-card>
-        </v-col>
-        <v-col>
-          <v-card v-bind:raised="color_id==1"><v-btn tile id="color-tile-1" v-bind:color="colors[1]" v-on:click="cb_action(1)"></v-btn></v-card>
-        </v-col>
-        <v-col>
-          <v-card v-bind:raised="color_id==2"><v-btn tile id="color-tile-2" v-bind:color="colors[2]" v-on:click="cb_action(2)"></v-btn></v-card>
+      <v-row v-for="offset in 2" v-bind:key="offset">
+        <v-col v-for="idx in 3" v-bind:key="idx">
+          <v-card v-bind:raised="color_id==(offset-1)*3+idx-1"><v-btn tile v-bind:color="colors[(offset-1)*3+idx-1]" v-on:click="cb_action((offset-1)*3+idx-1)"></v-btn></v-card>
         </v-col>
       </v-row>
-      <v-row>
-        <v-col>
-          <v-card v-bind:raised="color_id==3"><v-btn tile id="color-tile-3" v-bind:color="colors[3]" v-on:click="cb_action(3)"></v-btn></v-card>
-        </v-col>
-        <v-col>
-          <v-card v-bind:raised="color_id==4"><v-btn tile id="color-tile-4" v-bind:color="colors[4]" v-on:click="cb_action(4)"></v-btn></v-card>
-        </v-col>
-        <v-col>
-          <v-card v-bind:raised="color_id==5"><v-btn tile id="color-tile-5" v-bind:color="colors[5]" v-on:click="cb_action(5)"></v-btn></v-card>
-        </v-col>
-     </v-row>
     </v-container>
     <v-slider v-model="brightness" :max="255" label="Brightness" min-width="510" v-on:change="update_lc_config"></v-slider>
    </v-card>
