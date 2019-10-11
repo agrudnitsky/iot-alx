@@ -38,6 +38,8 @@
    </v-col>
 
   </v-row>
+
+  <v-btn v-on:click="toggle_remote_onoff()" v-bind:class="{primary: remote_onoff}"><v-icon>{{ remote_onoff_icon }}</v-icon></v-btn>
   </v-container>
 
   <photoshop-picker v-if="show_color_picker" v-model="color_definition" @cancel="color_picker_Cancel()" @ok="color_picker_OK()"/>
@@ -48,7 +50,7 @@
 import Vue from 'vue'
 import axios from 'axios'
 import VueAxios from 'vue-axios'
-import { mdiWrench } from '@mdi/js'
+import { mdiWrench, mdiLightbulbOn, mdiLightbulb } from '@mdi/js'
 import { Photoshop } from 'vue-color'
 
 Vue.use(VueAxios, axios)
@@ -59,7 +61,9 @@ export default {
   data: () => ({
       brightness: 90,
       color_selector: 0,
+      remote_onoff: 1,
       settings_icon: mdiWrench,
+      remote_onoff_icon: mdiLightbulbOn,
       edit_mode: false,
       setting_color: 0,
       show_color_picker: false,
@@ -72,7 +76,12 @@ export default {
   mounted() {
     axios
       .get("/api/v1/lc/getconfig")
-      .then(response => {this.brightness = response.data.brightness})
+      .then(response => {
+        this.brightness = response.data.brightness,
+        this.color_selector = response.data.color,
+        this.remote_onoff = response.data.remote_onoff,
+        this.remote_onoff_icon = response.data.remote_onoff ? mdiLightbulbOn : mdiLightbulb
+       })
       .catch(error => {console.log(error)}),
     axios
       .get("/api/v1/lc/getcols")
@@ -83,7 +92,8 @@ export default {
     update_lc_config: function() {
       this.axios.post("/api/v1/lc/setconfig", {
           brightness: this.brightness,
-          color_id: this.color_selector
+          color_id: this.color_selector,
+          remote_onoff: this.remote_onoff
         })
         .then(data => {
           console.log(data);
@@ -130,7 +140,17 @@ export default {
     },
     toggle_edit_mode: function() {
       this.edit_mode = !this.edit_mode;
+    },
+    toggle_remote_onoff: function() {
+      this.remote_onoff = this.remote_onoff ? 0 : 1;
+      if (this.remote_onoff) {
+        this.remote_onoff_icon = mdiLightbulbOn;
+      } else {
+        this.remote_onoff_icon = mdiLightbulb;
+      }
+      this.update_lc_config();
     }
+
   }
 };
 </script>

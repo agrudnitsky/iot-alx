@@ -138,14 +138,16 @@ static esp_err_t lc_config_post_handler(httpd_req_t *req)
     cJSON *root = cJSON_Parse(buf);
     int brightness = cJSON_GetObjectItem(root, "brightness")->valueint;
     int color_id = cJSON_GetObjectItem(root, "color_id")->valueint;
-    if (color_id > color_schedule_size || brightness > lc_config.max_bright) {
+    int remote_onoff = cJSON_GetObjectItem(root, "remote_onoff")->valueint;
+    if (color_id > color_schedule_size || brightness > lc_config.max_bright || (remote_onoff > 1 || remote_onoff < 0)) {
             httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Invalid light controller config");
             return ESP_FAIL;
     }
 
     lc_config.set_bright = brightness;
     lc_config.color = color_id;
-    ESP_LOGI(REST_TAG, "LC config: brightness = %d, color_id = %d", brightness, color_id);
+    lc_config.remote_onoff = remote_onoff;
+    ESP_LOGI(REST_TAG, "LC config: brightness = %d, color_id = %d, remote_onoff = %d", brightness, color_id, remote_onoff);
     cJSON_Delete(root);
     httpd_resp_sendstr(req, "Post control value successfully");
 
@@ -193,6 +195,7 @@ static esp_err_t lc_config_get_handler(httpd_req_t *req)
 
     cJSON_AddNumberToObject(root, "brightness", lc_config.set_bright);
     cJSON_AddNumberToObject(root, "color", lc_config.color);
+    cJSON_AddNumberToObject(root, "remote_onoff", lc_config.remote_onoff);
 
     const char *conf_json = cJSON_Print(root);
     httpd_resp_sendstr(req, conf_json);

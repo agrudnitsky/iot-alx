@@ -119,16 +119,24 @@ void room_lights(void *arg){
 		refresh_leds(color_schedule[lc_state.scheduled_color]);
 
 		on_off_switch = gpio_get_level(GPIO_NUM_32);
-		if (!on_off_switch && lc_state.on_off_switch) {
+		if ((!on_off_switch && lc_state.on_off_switch)
+		    || (!lc_config.remote_onoff && lc_state.remote_onoff)) {
 			/* 1 -> 0 */
 			lc_state.mode = LIGHTS_POWER_DOWN;
 			ESP_LOGI(LOGTAG_LC, "lights off");
-		} else if (on_off_switch && !lc_state.on_off_switch) {
+		} else if ((on_off_switch && !lc_state.on_off_switch)
+			   || (lc_config.remote_onoff && !lc_state.remote_onoff)) {
 			/* 0 -> 1 */
 			lc_state.mode = LIGHTS_POWER_UP;
 			ESP_LOGI(LOGTAG_LC, "lights on");
 		}
-		lc_state.on_off_switch = on_off_switch;
+		if (on_off_switch != lc_state.on_off_switch) {
+			lc_state.on_off_switch = on_off_switch;
+			/* physical switch action overrides remote on/off */
+			lc_state.remote_onoff = on_off_switch;
+			lc_config.remote_onoff = on_off_switch;
+		}
+		lc_state.remote_onoff = lc_config.remote_onoff;
 	}
 }
 
@@ -150,6 +158,8 @@ void init_lc(lc_state_t *lcs, lc_config_t *lcc) {
 	lcs->mode = CONSTANT;
 	lcs->brightness = 0;
 	lcs->scheduled_color = 0;
+	lcs->on_off_switch = gpio_get_level(GPIO_NUM_32);
+	lcs->remote_onoff = lcs->on_off_switch;
 
 	lcc->set_bright = 90;
 	lcc->color = 0;
@@ -157,8 +167,8 @@ void init_lc(lc_state_t *lcs, lc_config_t *lcc) {
 	lcc->max_bright = 254;
 	lcc->min_bright = 0;
 	lcc->set_mode = CONSTANT;
+	lcc->remote_onoff = lcs->on_off_switch;
 
-	lcs->on_off_switch = gpio_get_level(GPIO_NUM_32);
 
 	/* load config from NVS */
 	nvs_handle_t nvsh_load;

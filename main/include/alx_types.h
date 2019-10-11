@@ -9,6 +9,7 @@ typedef struct {
 	int brightness;
 	int scheduled_color;
 	int on_off_switch;
+	int remote_onoff;
 } lc_state_t;
 
 typedef struct {
@@ -18,6 +19,7 @@ typedef struct {
 	int max_bright;
 	int min_bright;
 	int refresh_delay;
+	int remote_onoff;
 } lc_config_t;
 
 
