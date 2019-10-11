@@ -1,5 +1,10 @@
 <template>
   <v-app>
+    <v-app-bar app>
+      Awesome Lights Xtreme - v.{{ version }}
+    </v-app-bar>
+
+   <v-content>
    <v-container>
    <v-row>
 
@@ -26,6 +31,7 @@
   </v-container>
 
   <photoshop-picker v-if="show_color_picker" v-model="color_definition" @cancel="color_picker_Cancel()" @ok="color_picker_OK()"/>
+  </v-content>
   </v-app>
 </template>
 
@@ -42,6 +48,7 @@ Vue.use(VueAxios, axios)
 export default {
   name: 'app',
   data: () => ({
+      version: process.env.VUE_APP_VERSION,
       brightness: 90,
       color_id: 0,
       remote_onoff: 1,
