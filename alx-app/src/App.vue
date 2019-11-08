@@ -65,6 +65,9 @@ export default {
   mounted() {
     this.refresh_config()
   },
+  updated() {
+    this.refresh_config()
+  },
   methods: {
     refresh_config: function() {
       axios
