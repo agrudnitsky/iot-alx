@@ -63,7 +63,11 @@ export default {
     'photoshop-picker': Photoshop
   },
   mounted() {
-    axios
+    this.refresh_config()
+  },
+  methods: {
+    refresh_config: function() {
+      axios
       .get("/api/v1/lc/getconfig")
       .then(response => {
         this.brightness = response.data.brightness,
@@ -75,9 +79,8 @@ export default {
     axios
       .get("/api/v1/lc/getcols")
       .then(response => {this.colors = response.data.cols
-	}).catch(error => {console.log(error)})
-  },
-  methods: {
+      }).catch(error => {console.log(error)})
+    },
     update_lc_config: function() {
       this.axios.post("/api/v1/lc/setconfig", {
           brightness: this.brightness,
