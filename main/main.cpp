@@ -155,11 +155,11 @@ void house_keeper(void *arg) {
 
 
 void init_lc(lc_state_t *lcs, lc_config_t *lcc) {
-	lcs->mode = CONSTANT;
 	lcs->brightness = 0;
 	lcs->scheduled_color = 0;
 	lcs->on_off_switch = gpio_get_level(GPIO_NUM_32);
 	lcs->remote_onoff = lcs->on_off_switch;
+	lcs->mode = lcs->on_off_switch ? CONSTANT : LIGHTS_OFF;
 
 	lcc->set_bright = 90;
 	lcc->color = 0;
