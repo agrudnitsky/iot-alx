@@ -20,8 +20,15 @@ static EventGroupHandle_t s_wifi_event_group;
 static int WIFI_CONNECTED_BIT = BIT0;
 static int s_retry_num = 0;
 static int net_startup = 1;
+static int schedule_netup_actions = 0;
 
 const char *version = VERSION;
+
+
+esp_http_client_config_t http_client_conf = {
+	.url = "http://www.google.com/",
+	.event_handler = _http_header_to_datetime,
+};
 
 
 extern "C" {
@@ -52,6 +59,7 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
 		ESP_LOGI(LOGTAG_WIFI, "got ip: %s", ip4addr_ntoa(&event->ip_info.ip));
 		s_retry_num = 0;
 		xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+		schedule_netup_actions = 1;
 	}
 }
 
@@ -141,14 +149,56 @@ void room_lights(void *arg){
 }
 
 
+esp_err_t _http_header_to_datetime(esp_http_client_event_t *ev) {
+	struct tm htime;
+	time_t now;
+	struct timeval tv_now;
+	struct timezone tz_cur;
+
+	switch (ev->event_id) {
+	case HTTP_EVENT_ON_HEADER:
+		if (0 == strncmp("Date", ev->header_key, 4)) {
+			strptime((char *)ev->header_value, "%a, %d %b %Y %T", &htime);
+			now = mktime(&htime);
+			tv_now.tv_sec = now;
+			tz_cur.tz_minuteswest = TZ_OFFSET*60;
+			tz_cur.tz_dsttime = TZ_DST_CORRECTION;
+			settimeofday(&tv_now, &tz_cur);
+		}
+		break;
+	case HTTP_EVENT_ERROR:
+	case HTTP_EVENT_ON_CONNECTED:
+	case HTTP_EVENT_HEADERS_SENT:
+	case HTTP_EVENT_ON_DATA:
+	case HTTP_EVENT_ON_FINISH:
+	case HTTP_EVENT_DISCONNECTED:
+		break;
+	}
+
+	return ESP_OK;
+}
+
+
+void netup_actions() {
+	/* get date/time from HTTP response header */
+	esp_http_client_handle_t http_client = esp_http_client_init(&http_client_conf);
+	esp_err_t err = esp_http_client_perform(http_client);
+	esp_http_client_cleanup(http_client);
+}
+
+
 void house_keeper(void *arg) {
 	timer_event_t ev;
 	wifi_ap_record_t ap_info;
+	struct timeval now;
 
 	while (1) {
 		xQueueReceive(timer_queue, &ev, portMAX_DELAY);
 		if (ESP_ERR_WIFI_NOT_CONNECT == esp_wifi_sta_get_ap_info(&ap_info)) {
 			reinit_net();
+		} else if (schedule_netup_actions) {
+			netup_actions();
+			schedule_netup_actions = 0;
 		}
 	}
 }
