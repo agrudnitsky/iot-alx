@@ -18,8 +18,9 @@
 #include "alx_types.h"
 
 extern lc_config_t lc_config;
-extern int color_schedule_size;
-extern CRGB color_schedule[];
+extern int num_color_schedules;
+extern int color_schedule_size[];
+extern CRGB *color_schedule[];
 
 static const char *REST_TAG = "esp-rest";
 #define REST_CHECK(a, str, goto_tag, ...)                                              \
@@ -138,22 +139,25 @@ static esp_err_t lc_config_post_handler(httpd_req_t *req)
     cJSON *root = cJSON_Parse(buf);
     int brightness = cJSON_GetObjectItem(root, "brightness")->valueint;
     int color_id = cJSON_GetObjectItem(root, "color_id")->valueint;
+    int cs = cJSON_GetObjectItem(root, "color_schedule")->valueint;
     int remote_onoff = cJSON_GetObjectItem(root, "remote_onoff")->valueint;
-    if (color_id > color_schedule_size || brightness > lc_config.max_bright || (remote_onoff > 1 || remote_onoff < 0)) {
+    if (cs > num_color_schedules || color_id > color_schedule_size[cs] || brightness > lc_config.max_bright || (remote_onoff > 1 || remote_onoff < 0)) {
             httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Invalid light controller config");
             return ESP_FAIL;
     }
 
     lc_config.set_bright = brightness;
     lc_config.color = color_id;
+    lc_config.color_schedule = cs;
     lc_config.remote_onoff = remote_onoff;
-    ESP_LOGI(REST_TAG, "LC config: brightness = %d, color_id = %d, remote_onoff = %d", brightness, color_id, remote_onoff);
+    ESP_LOGI(REST_TAG, "LC config: brightness = %d, color_id = %d, color_schedule = %d, remote_onoff = %d", brightness, color_id, cs, remote_onoff);
     cJSON_Delete(root);
     httpd_resp_sendstr(req, "Post control value successfully");
 
     /* store new values to NVS */
     nvs_update_config("alx.lcc", "set_bright", brightness);
     nvs_update_config("alx.lcc", "color", color_id);
+    nvs_update_config("alx.lcc", "color_schedule", cs);
     return ESP_OK;
 }
 
@@ -162,28 +166,31 @@ static esp_err_t lc_config_post_handler(httpd_req_t *req)
 static esp_err_t lc_cols_get_handler(httpd_req_t *req)
 {
 	char hexcol[8];
-	int i;
+	int cs, i;
 
-    httpd_resp_set_type(req, "application/json");
-    cJSON *root = cJSON_CreateObject();
+	httpd_resp_set_type(req, "application/json");
+	cJSON *root = cJSON_CreateObject();
 
-    cJSON *cols = cJSON_CreateArray();
-    if (NULL == cols) {
-	    return ESP_FAIL;
-    }
+	cJSON *cols = cJSON_CreateArray();
+	if (NULL == cols) {
+		return ESP_FAIL;
+	}
 
-    cJSON_AddItemToObject(root, "cols", cols);
+	cJSON_AddItemToObject(root, "cols", cols);
 
-    for (i = 0; i < color_schedule_size; ++i) {
-	    sprintf(hexcol, "#%02X%02X%02X", color_schedule[i].r, color_schedule[i].g, color_schedule[i].b);
-	    cJSON_AddItemToArray(cols, cJSON_CreateString(hexcol));
-    }
+	for (cs = 0; cs < num_color_schedules; ++cs) {
+		cJSON_AddItemToArray(cols, cJSON_CreateArray());
+		for (i = 0; i < color_schedule_size[cs]; ++i) {
+			sprintf(hexcol, "#%02X%02X%02X", color_schedule[cs][i].r, color_schedule[cs][i].g, color_schedule[cs][i].b);
+			cJSON_AddItemToArray(cJSON_GetArrayItem(cols, cs), cJSON_CreateString(hexcol));
+		}
+	}
 
-    const char *cols_json = cJSON_Print(root);
-    httpd_resp_sendstr(req, cols_json);
-    free((void *)cols_json);
-    cJSON_Delete(root);
-    return ESP_OK;
+	const char *cols_json = cJSON_Print(root);
+	httpd_resp_sendstr(req, cols_json);
+	free((void *)cols_json);
+	cJSON_Delete(root);
+	return ESP_OK;
 }
 
 
@@ -195,6 +202,7 @@ static esp_err_t lc_config_get_handler(httpd_req_t *req)
 
     cJSON_AddNumberToObject(root, "brightness", lc_config.set_bright);
     cJSON_AddNumberToObject(root, "color", lc_config.color);
+    cJSON_AddNumberToObject(root, "color_schedule", lc_config.color_schedule);
     cJSON_AddNumberToObject(root, "remote_onoff", lc_config.remote_onoff);
 
     const char *conf_json = cJSON_Print(root);
@@ -209,44 +217,45 @@ static esp_err_t lc_config_get_handler(httpd_req_t *req)
 static esp_err_t lc_coldef_post_handler(httpd_req_t *req)
 {
 	int col_r, col_g, col_b;
-    int total_len = req->content_len;
-    int cur_len = 0;
-    char *buf = ((rest_server_context_t *)(req->user_ctx))->scratch;
-    int received = 0;
-    if (total_len >= SCRATCH_BUFSIZE) {
-        /* Respond with 500 Internal Server Error */
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "content too long");
-        return ESP_FAIL;
-    }
-    while (cur_len < total_len) {
-        received = httpd_req_recv(req, buf + cur_len, total_len);
-        if (received <= 0) {
-            /* Respond with 500 Internal Server Error */
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to post control value");
-            return ESP_FAIL;
-        }
-        cur_len += received;
-    }
-    buf[total_len] = '\0';
+	int total_len = req->content_len;
+	int cur_len = 0;
+	char *buf = ((rest_server_context_t *)(req->user_ctx))->scratch;
+	int received = 0;
+	if (total_len >= SCRATCH_BUFSIZE) {
+		/* Respond with 500 Internal Server Error */
+		httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "content too long");
+		return ESP_FAIL;
+	}
+	while (cur_len < total_len) {
+		received = httpd_req_recv(req, buf + cur_len, total_len);
+		if (received <= 0) {
+			/* Respond with 500 Internal Server Error */
+			httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to post control value");
+			return ESP_FAIL;
+		}
+		cur_len += received;
+	}
+	buf[total_len] = '\0';
 
-    cJSON *root = cJSON_Parse(buf);
-    int color_id = cJSON_GetObjectItem(root, "color_id")->valueint;
-    char *hexcolor = cJSON_GetObjectItem(root, "hexvalue")->valuestring;
-    if (3 != sscanf(hexcolor, "#%2X%2X%2X", &col_r, &col_g, &col_b) || color_id > color_schedule_size) {
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Invalid color definition");
-            return ESP_FAIL;
-    }
+	cJSON *root = cJSON_Parse(buf);
+	int color_id = cJSON_GetObjectItem(root, "color_id")->valueint;
+	int cs = cJSON_GetObjectItem(root, "color_schedule")->valueint;
+	char *hexcolor = cJSON_GetObjectItem(root, "hexvalue")->valuestring;
+	if (3 != sscanf(hexcolor, "#%2X%2X%2X", &col_r, &col_g, &col_b) || cs > num_color_schedules || color_id > color_schedule_size[cs]) {
+		httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Invalid color definition");
+		return ESP_FAIL;
+	}
 
-    color_schedule[color_id].r = col_r;
-    color_schedule[color_id].g = col_g;
-    color_schedule[color_id].b = col_b;
-    ESP_LOGI(REST_TAG, "LC coldef: color = %d,%d,%d, color_id = %d", col_r, col_g, col_b, color_id);
-    cJSON_Delete(root);
-    httpd_resp_sendstr(req, "Post control value successfully");
+	color_schedule[cs][color_id].r = col_r;
+	color_schedule[cs][color_id].g = col_g;
+	color_schedule[cs][color_id].b = col_b;
+	ESP_LOGI(REST_TAG, "LC coldef: color = %d,%d,%d, color_id = %d, color_schedule = %d", col_r, col_g, col_b, color_id, cs);
+	cJSON_Delete(root);
+	httpd_resp_sendstr(req, "Post control value successfully");
 
-    nvs_update_coldef("alx.lcc", color_id);
+	nvs_update_coldef("alx.lcc", cs, color_id);
 
-    return ESP_OK;
+	return ESP_OK;
 }
 
 

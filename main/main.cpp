@@ -7,11 +7,13 @@ xQueueHandle timer_queue;
 
 CRGB leds[NUM_LEDS];
 
-CRGB color_schedule[] = {
-	CRGB::OrangeRed, CRGB::FloralWhite, CRGB::DeepPink,
-	CRGB::SpringGreen, CRGB::MediumBlue, CRGB::Indigo
+CRGB color_schedule[][6] = {
+	{CRGB::OrangeRed, CRGB::FloralWhite, CRGB::DeepPink,
+	 CRGB::SpringGreen, CRGB::MediumBlue, CRGB::Indigo},
+	{CRGB::OrangeRed, CRGB::FloralWhite, CRGB::FloralWhite, CRGB::FloralWhite, CRGB::FloralWhite, CRGB::OrangeRed}
 };
-int color_schedule_size = sizeof(color_schedule)/sizeof(color_schedule[0]);
+int num_color_schedules = sizeof(color_schedule)/sizeof(color_schedule[0]);
+int color_schedule_size[sizeof(color_schedule)/sizeof(color_schedule[0])];
 
 lc_state_t lc_state;
 lc_config_t lc_config;
@@ -124,7 +126,7 @@ void room_lights(void *arg){
 		if (lc_state.brightness < 0) lc_state.brightness = lc_config.set_bright;
 
 		FastLED.setBrightness(lc_state.brightness);
-		refresh_leds(color_schedule[lc_state.scheduled_color]);
+		refresh_leds(color_schedule[lc_state.color_schedule][lc_state.scheduled_color]);
 
 		on_off_switch = gpio_get_level(GPIO_NUM_32);
 		if ((!on_off_switch && lc_state.on_off_switch)
@@ -205,26 +207,32 @@ void house_keeper(void *arg) {
 
 
 void init_lc(lc_state_t *lcs, lc_config_t *lcc) {
+	int cs, i;
+	nvs_handle_t nvsh_load;
+	char key[11];
+	uint32_t colval;
+
+	for (i = 0; i < num_color_schedules; ++i) {
+		color_schedule_size[i] = sizeof(color_schedule[i])/sizeof(color_schedule[i][0]);
+	}
+
 	lcs->brightness = 0;
 	lcs->scheduled_color = 0;
+	lcs->color_schedule = 0;
 	lcs->on_off_switch = gpio_get_level(GPIO_NUM_32);
 	lcs->remote_onoff = lcs->on_off_switch;
 	lcs->mode = lcs->on_off_switch ? CONSTANT : LIGHTS_OFF;
 
 	lcc->set_bright = 90;
 	lcc->color = 0;
+	lcc->color_schedule = 0;
 	lcc->refresh_delay = 20;
 	lcc->max_bright = 254;
 	lcc->min_bright = 0;
 	lcc->set_mode = CONSTANT;
 	lcc->remote_onoff = lcs->on_off_switch;
 
-
 	/* load config from NVS */
-	nvs_handle_t nvsh_load;
-	char key[8];
-	int i;
-	uint32_t colval;
 	esp_err_t err = nvs_open("alx.lcc", NVS_READONLY, &nvsh_load);
 	if (ESP_OK != err) {
 		ESP_LOGW(LOGTAG_MISC, "failed opening nvs for loading");
@@ -233,14 +241,17 @@ void init_lc(lc_state_t *lcs, lc_config_t *lcc) {
 	/* config */
 	nvs_get_i32(nvsh_load, "set_bright", &(lcc->set_bright));
 	nvs_get_i32(nvsh_load, "color", &(lcc->color));
+	nvs_get_i32(nvsh_load, "color_schedule", &(lcc->color_schedule));
 
 	/* color definitions */
-	for (i = 0; i < color_schedule_size; ++i) {
-		sprintf(key, "col.%03u", i);
-		if (ESP_OK == nvs_get_u32(nvsh_load, key, &colval)) {
-			color_schedule[i].r = (0x00FF0000 & colval) >> 16;
-			color_schedule[i].g = (0x0000FF00 & colval) >> 8;
-			color_schedule[i].b = 0x000000FF & colval;
+	for (cs = 0; cs < num_color_schedules; ++cs) {
+		for (i = 0; i < color_schedule_size[cs]; ++i) {
+			sprintf(key, "col%03u.%03u", cs, i);
+			if (ESP_OK == nvs_get_u32(nvsh_load, key, &colval)) {
+				color_schedule[cs][i].r = (0x00FF0000 & colval) >> 16;
+				color_schedule[cs][i].g = (0x0000FF00 & colval) >> 8;
+				color_schedule[cs][i].b = 0x000000FF & colval;
+			}
 		}
 	}
 
@@ -257,12 +268,12 @@ void nvs_update_config(const char *nvs_namespace, const char *key, int val) {
 }
 
 
-void nvs_update_coldef(const char *nvs_namespace, int color_id) {
-	uint32_t storeval = (color_schedule[color_id].r << 16) | (color_schedule[color_id].g << 8) | color_schedule[color_id].b;
+void nvs_update_coldef(const char *nvs_namespace, int cs, int color_id) {
+	uint32_t storeval = (color_schedule[cs][color_id].r << 16) | (color_schedule[cs][color_id].g << 8) | color_schedule[cs][color_id].b;
 	nvs_handle_t nvsh_update;
-	char key[8];
+	char key[11];
 
-	sprintf(key, "col.%03u", color_id);
+	sprintf(key, "col%03u.%03u", cs, color_id);
 
 	nvs_open(nvs_namespace, NVS_READWRITE, &nvsh_update);
 
@@ -278,6 +289,7 @@ void nvs_lc_init() {
 	ESP_ERROR_CHECK(nvs_open("alx.lcc", NVS_READWRITE, &nvsh_write));
 	nvs_set_i32(nvsh_write, "set_bright", 90);
 	nvs_set_i32(nvsh_write, "color", 0);
+	nvs_set_i32(nvsh_write, "color_schedule", 0);
 	nvs_set_i32(nvsh_write, "set_mode", CONSTANT);
 	nvs_commit(nvsh_write);
 	nvs_close(nvsh_write);
