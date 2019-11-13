@@ -119,6 +119,7 @@ void room_lights(void *arg){
 		default:
 			lc_state.brightness = lc_config.set_bright;
 			lc_state.scheduled_color = lc_config.color;
+			lc_state.color_palette = lc_config.color_palette;
 			break;
 		};
 
