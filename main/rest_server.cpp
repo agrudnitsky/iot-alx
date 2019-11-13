@@ -18,9 +18,9 @@
 #include "alx_types.h"
 
 extern lc_config_t lc_config;
-extern int num_color_schedules;
-extern int color_schedule_size[];
-extern CRGB *color_schedule[];
+extern int num_color_palettes;
+extern int color_palette_size[];
+extern CRGB *color_palette[];
 
 static const char *REST_TAG = "esp-rest";
 #define REST_CHECK(a, str, goto_tag, ...)                                              \
@@ -139,25 +139,25 @@ static esp_err_t lc_config_post_handler(httpd_req_t *req)
     cJSON *root = cJSON_Parse(buf);
     int brightness = cJSON_GetObjectItem(root, "brightness")->valueint;
     int color_id = cJSON_GetObjectItem(root, "color_id")->valueint;
-    int cs = cJSON_GetObjectItem(root, "color_schedule")->valueint;
+    int cs = cJSON_GetObjectItem(root, "color_palette")->valueint;
     int remote_onoff = cJSON_GetObjectItem(root, "remote_onoff")->valueint;
-    if (cs > num_color_schedules || color_id > color_schedule_size[cs] || brightness > lc_config.max_bright || (remote_onoff > 1 || remote_onoff < 0)) {
+    if (cs > num_color_palettes || color_id > color_palette_size[cs] || brightness > lc_config.max_bright || (remote_onoff > 1 || remote_onoff < 0)) {
             httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Invalid light controller config");
             return ESP_FAIL;
     }
 
     lc_config.set_bright = brightness;
     lc_config.color = color_id;
-    lc_config.color_schedule = cs;
+    lc_config.color_palette = cs;
     lc_config.remote_onoff = remote_onoff;
-    ESP_LOGI(REST_TAG, "LC config: brightness = %d, color_id = %d, color_schedule = %d, remote_onoff = %d", brightness, color_id, cs, remote_onoff);
+    ESP_LOGI(REST_TAG, "LC config: brightness = %d, color_id = %d, color_palette = %d, remote_onoff = %d", brightness, color_id, cs, remote_onoff);
     cJSON_Delete(root);
     httpd_resp_sendstr(req, "Post control value successfully");
 
     /* store new values to NVS */
     nvs_update_config("alx.lcc", "set_bright", brightness);
     nvs_update_config("alx.lcc", "color", color_id);
-    nvs_update_config("alx.lcc", "color_schedule", cs);
+    nvs_update_config("alx.lcc", "color_palette", cs);
     return ESP_OK;
 }
 
@@ -178,10 +178,10 @@ static esp_err_t lc_cols_get_handler(httpd_req_t *req)
 
 	cJSON_AddItemToObject(root, "cols", cols);
 
-	for (cs = 0; cs < num_color_schedules; ++cs) {
+	for (cs = 0; cs < num_color_palettes; ++cs) {
 		cJSON_AddItemToArray(cols, cJSON_CreateArray());
-		for (i = 0; i < color_schedule_size[cs]; ++i) {
-			sprintf(hexcol, "#%02X%02X%02X", color_schedule[cs][i].r, color_schedule[cs][i].g, color_schedule[cs][i].b);
+		for (i = 0; i < color_palette_size[cs]; ++i) {
+			sprintf(hexcol, "#%02X%02X%02X", color_palette[cs][i].r, color_palette[cs][i].g, color_palette[cs][i].b);
 			cJSON_AddItemToArray(cJSON_GetArrayItem(cols, cs), cJSON_CreateString(hexcol));
 		}
 	}
@@ -202,7 +202,7 @@ static esp_err_t lc_config_get_handler(httpd_req_t *req)
 
     cJSON_AddNumberToObject(root, "brightness", lc_config.set_bright);
     cJSON_AddNumberToObject(root, "color", lc_config.color);
-    cJSON_AddNumberToObject(root, "color_schedule", lc_config.color_schedule);
+    cJSON_AddNumberToObject(root, "color_palette", lc_config.color_palette);
     cJSON_AddNumberToObject(root, "remote_onoff", lc_config.remote_onoff);
 
     const char *conf_json = cJSON_Print(root);
@@ -239,17 +239,17 @@ static esp_err_t lc_coldef_post_handler(httpd_req_t *req)
 
 	cJSON *root = cJSON_Parse(buf);
 	int color_id = cJSON_GetObjectItem(root, "color_id")->valueint;
-	int cs = cJSON_GetObjectItem(root, "color_schedule")->valueint;
+	int cs = cJSON_GetObjectItem(root, "color_palette")->valueint;
 	char *hexcolor = cJSON_GetObjectItem(root, "hexvalue")->valuestring;
-	if (3 != sscanf(hexcolor, "#%2X%2X%2X", &col_r, &col_g, &col_b) || cs > num_color_schedules || color_id > color_schedule_size[cs]) {
+	if (3 != sscanf(hexcolor, "#%2X%2X%2X", &col_r, &col_g, &col_b) || cs > num_color_palettes || color_id > color_palette_size[cs]) {
 		httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Invalid color definition");
 		return ESP_FAIL;
 	}
 
-	color_schedule[cs][color_id].r = col_r;
-	color_schedule[cs][color_id].g = col_g;
-	color_schedule[cs][color_id].b = col_b;
-	ESP_LOGI(REST_TAG, "LC coldef: color = %d,%d,%d, color_id = %d, color_schedule = %d", col_r, col_g, col_b, color_id, cs);
+	color_palette[cs][color_id].r = col_r;
+	color_palette[cs][color_id].g = col_g;
+	color_palette[cs][color_id].b = col_b;
+	ESP_LOGI(REST_TAG, "LC coldef: color = %d,%d,%d, color_id = %d, color_palette = %d", col_r, col_g, col_b, color_id, cs);
 	cJSON_Delete(root);
 	httpd_resp_sendstr(req, "Post control value successfully");
 
