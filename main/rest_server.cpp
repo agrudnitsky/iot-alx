@@ -204,6 +204,7 @@ static esp_err_t lc_config_get_handler(httpd_req_t *req)
     cJSON_AddNumberToObject(root, "color", lc_config.color);
     cJSON_AddNumberToObject(root, "color_palette", lc_config.color_palette);
     cJSON_AddNumberToObject(root, "remote_onoff", lc_config.remote_onoff);
+    cJSON_AddNumberToObject(root, "num_palettes", num_color_palettes);
 
     const char *conf_json = cJSON_Print(root);
     httpd_resp_sendstr(req, conf_json);
