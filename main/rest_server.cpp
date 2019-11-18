@@ -22,8 +22,6 @@ extern int num_color_palettes;
 extern int color_palette_size[];
 extern CRGB *color_palette[];
 
-static const char *REST_TAG = "esp-rest";
-
 #define FILE_PATH_MAX (ESP_VFS_PATH_MAX + 128)
 #define SCRATCH_BUFSIZE (10240)
 
@@ -69,7 +67,7 @@ static esp_err_t rest_common_get_handler(httpd_req_t *req)
     }
     int fd = open(filepath, O_RDONLY, 0);
     if (fd == -1) {
-        ESP_LOGE(REST_TAG, "Failed to open file : %s", filepath);
+        ESP_LOGE(LOGTAG_REST, "Failed to open file : %s", filepath);
         /* Respond with 500 Internal Server Error */
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to read existing file");
         return ESP_FAIL;
@@ -83,12 +81,12 @@ static esp_err_t rest_common_get_handler(httpd_req_t *req)
         /* Read file in chunks into the scratch buffer */
         read_bytes = read(fd, chunk, SCRATCH_BUFSIZE);
         if (read_bytes == -1) {
-            ESP_LOGE(REST_TAG, "Failed to read file : %s", filepath);
+            ESP_LOGE(LOGTAG_REST, "Failed to read file : %s", filepath);
         } else if (read_bytes > 0) {
             /* Send the buffer contents as HTTP response chunk */
             if (httpd_resp_send_chunk(req, chunk, read_bytes) != ESP_OK) {
                 close(fd);
-                ESP_LOGE(REST_TAG, "File sending failed!");
+                ESP_LOGE(LOGTAG_REST, "File sending failed!");
                 /* Abort sending file */
                 httpd_resp_sendstr_chunk(req, NULL);
                 /* Respond with 500 Internal Server Error */
@@ -99,7 +97,7 @@ static esp_err_t rest_common_get_handler(httpd_req_t *req)
     } while (read_bytes > 0);
     /* Close file after sending complete */
     close(fd);
-    ESP_LOGI(REST_TAG, "File sending complete");
+    ESP_LOGI(LOGTAG_REST, "File sending complete");
     /* Respond with an empty chunk to signal HTTP response completion */
     httpd_resp_send_chunk(req, NULL, 0);
     return ESP_OK;
@@ -142,7 +140,7 @@ static esp_err_t lc_config_post_handler(httpd_req_t *req)
     lc_config.color = color_id;
     lc_config.color_palette = cs;
     lc_config.remote_onoff = remote_onoff;
-    ESP_LOGI(REST_TAG, "LC config: brightness = %d, color_id = %d, color_palette = %d, remote_onoff = %d", brightness, color_id, cs, remote_onoff);
+    ESP_LOGI(LOGTAG_REST, "LC config: brightness = %d, color_id = %d, color_palette = %d, remote_onoff = %d", brightness, color_id, cs, remote_onoff);
     cJSON_Delete(root);
     httpd_resp_sendstr(req, "Post control value successfully");
 
@@ -242,7 +240,7 @@ static esp_err_t lc_coldef_post_handler(httpd_req_t *req)
 	color_palette[cs][color_id].r = col_r;
 	color_palette[cs][color_id].g = col_g;
 	color_palette[cs][color_id].b = col_b;
-	ESP_LOGI(REST_TAG, "LC coldef: color = %d,%d,%d, color_id = %d, color_palette = %d", col_r, col_g, col_b, color_id, cs);
+	ESP_LOGI(LOGTAG_REST, "LC coldef: color = %d,%d,%d, color_id = %d, color_palette = %d", col_r, col_g, col_b, color_id, cs);
 	cJSON_Delete(root);
 	httpd_resp_sendstr(req, "Post control value successfully");
 
@@ -254,12 +252,12 @@ static esp_err_t lc_coldef_post_handler(httpd_req_t *req)
 
 esp_err_t start_rest_server(const char *base_path, int core_id) {
     if (NULL == base_path) {
-            ESP_LOGE(REST_TAG, "wrong base path");
+            ESP_LOGE(LOGTAG_REST, "wrong base path");
             return ESP_FAIL;
     }
     rest_server_context_t *rest_context = (rest_server_context_t *)calloc(1, sizeof(rest_server_context_t));
     if (NULL == rest_context) {
-            ESP_LOGE(REST_TAG, "No memory for rest context");
+            ESP_LOGE(LOGTAG_REST, "No memory for rest context");
             return ESP_FAIL;
     }
     strlcpy(rest_context->base_path, base_path, sizeof(rest_context->base_path));
@@ -269,9 +267,9 @@ esp_err_t start_rest_server(const char *base_path, int core_id) {
     config.uri_match_fn = httpd_uri_match_wildcard;
     config.core_id = core_id;
 
-    ESP_LOGI(REST_TAG, "Starting HTTP Server");
+    ESP_LOGI(LOGTAG_REST, "Starting HTTP Server");
     if (ESP_OK != httpd_start(&server, &config)) {
-            ESP_LOGE(REST_TAG, "Start server failed");
+            ESP_LOGE(LOGTAG_REST, "Start server failed");
             free(rest_context);
             return ESP_FAIL;
     }

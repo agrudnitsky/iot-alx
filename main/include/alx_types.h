@@ -3,6 +3,7 @@
 
 enum lc_mode {CONSTANT, FADE_UP, FADE_DOWN, LIGHTS_OFF, LIGHTS_POWER_DOWN, LIGHTS_POWER_UP};
 
+#define LOGTAG_REST "rest"
 
 typedef struct {
 	lc_mode mode;
