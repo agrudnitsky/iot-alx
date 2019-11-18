@@ -18,19 +18,9 @@
 #include "alx_types.h"
 
 extern lc_config_t lc_config;
-extern int color_schedule_size;
-extern CRGB color_schedule[];
-
-static const char *REST_TAG = "esp-rest";
-#define REST_CHECK(a, str, goto_tag, ...)                                              \
-    do                                                                                 \
-    {                                                                                  \
-        if (!(a))                                                                      \
-        {                                                                              \
-            ESP_LOGE(REST_TAG, "%s(%d): " str, __FUNCTION__, __LINE__, ##__VA_ARGS__); \
-            goto goto_tag;                                                             \
-        }                                                                              \
-    } while (0)
+extern int num_color_palettes;
+extern int color_palette_size[];
+extern CRGB color_palette[][6];
 
 #define FILE_PATH_MAX (ESP_VFS_PATH_MAX + 128)
 #define SCRATCH_BUFSIZE (10240)
@@ -62,6 +52,7 @@ static esp_err_t set_content_type_from_file(httpd_req_t *req, const char *filepa
     return httpd_resp_set_type(req, type);
 }
 
+
 /* Send HTTP response with the contents of the requested file */
 static esp_err_t rest_common_get_handler(httpd_req_t *req)
 {
@@ -76,7 +67,7 @@ static esp_err_t rest_common_get_handler(httpd_req_t *req)
     }
     int fd = open(filepath, O_RDONLY, 0);
     if (fd == -1) {
-        ESP_LOGE(REST_TAG, "Failed to open file : %s", filepath);
+        ESP_LOGE(LOGTAG_REST, "Failed to open file : %s", filepath);
         /* Respond with 500 Internal Server Error */
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to read existing file");
         return ESP_FAIL;
@@ -90,12 +81,12 @@ static esp_err_t rest_common_get_handler(httpd_req_t *req)
         /* Read file in chunks into the scratch buffer */
         read_bytes = read(fd, chunk, SCRATCH_BUFSIZE);
         if (read_bytes == -1) {
-            ESP_LOGE(REST_TAG, "Failed to read file : %s", filepath);
+            ESP_LOGE(LOGTAG_REST, "Failed to read file : %s", filepath);
         } else if (read_bytes > 0) {
             /* Send the buffer contents as HTTP response chunk */
             if (httpd_resp_send_chunk(req, chunk, read_bytes) != ESP_OK) {
                 close(fd);
-                ESP_LOGE(REST_TAG, "File sending failed!");
+                ESP_LOGE(LOGTAG_REST, "File sending failed!");
                 /* Abort sending file */
                 httpd_resp_sendstr_chunk(req, NULL);
                 /* Respond with 500 Internal Server Error */
@@ -106,7 +97,7 @@ static esp_err_t rest_common_get_handler(httpd_req_t *req)
     } while (read_bytes > 0);
     /* Close file after sending complete */
     close(fd);
-    ESP_LOGI(REST_TAG, "File sending complete");
+    ESP_LOGI(LOGTAG_REST, "File sending complete");
     /* Respond with an empty chunk to signal HTTP response completion */
     httpd_resp_send_chunk(req, NULL, 0);
     return ESP_OK;
@@ -138,22 +129,25 @@ static esp_err_t lc_config_post_handler(httpd_req_t *req)
     cJSON *root = cJSON_Parse(buf);
     int brightness = cJSON_GetObjectItem(root, "brightness")->valueint;
     int color_id = cJSON_GetObjectItem(root, "color_id")->valueint;
+    int cs = cJSON_GetObjectItem(root, "color_palette")->valueint;
     int remote_onoff = cJSON_GetObjectItem(root, "remote_onoff")->valueint;
-    if (color_id > color_schedule_size || brightness > lc_config.max_bright || (remote_onoff > 1 || remote_onoff < 0)) {
+    if (cs > num_color_palettes || color_id > color_palette_size[cs] || brightness > lc_config.max_bright || (remote_onoff > 1 || remote_onoff < 0)) {
             httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Invalid light controller config");
             return ESP_FAIL;
     }
 
     lc_config.set_bright = brightness;
     lc_config.color = color_id;
+    lc_config.color_palette = cs;
     lc_config.remote_onoff = remote_onoff;
-    ESP_LOGI(REST_TAG, "LC config: brightness = %d, color_id = %d, remote_onoff = %d", brightness, color_id, remote_onoff);
+    ESP_LOGI(LOGTAG_REST, "LC config: brightness = %d, color_id = %d, color_palette = %d, remote_onoff = %d", brightness, color_id, cs, remote_onoff);
     cJSON_Delete(root);
     httpd_resp_sendstr(req, "Post control value successfully");
 
     /* store new values to NVS */
     nvs_update_config("alx.lcc", "set_bright", brightness);
     nvs_update_config("alx.lcc", "color", color_id);
+    nvs_update_config("alx.lcc", "color_palette", cs);
     return ESP_OK;
 }
 
@@ -162,28 +156,31 @@ static esp_err_t lc_config_post_handler(httpd_req_t *req)
 static esp_err_t lc_cols_get_handler(httpd_req_t *req)
 {
 	char hexcol[8];
-	int i;
+	int cs, i;
 
-    httpd_resp_set_type(req, "application/json");
-    cJSON *root = cJSON_CreateObject();
+	httpd_resp_set_type(req, "application/json");
+	cJSON *root = cJSON_CreateObject();
 
-    cJSON *cols = cJSON_CreateArray();
-    if (NULL == cols) {
-	    return ESP_FAIL;
-    }
+	cJSON *cols = cJSON_CreateArray();
+	if (NULL == cols) {
+		return ESP_FAIL;
+	}
 
-    cJSON_AddItemToObject(root, "cols", cols);
+	cJSON_AddItemToObject(root, "cols", cols);
 
-    for (i = 0; i < color_schedule_size; ++i) {
-	    sprintf(hexcol, "#%02X%02X%02X", color_schedule[i].r, color_schedule[i].g, color_schedule[i].b);
-	    cJSON_AddItemToArray(cols, cJSON_CreateString(hexcol));
-    }
+	for (cs = 0; cs < num_color_palettes; ++cs) {
+		cJSON_AddItemToArray(cols, cJSON_CreateArray());
+		for (i = 0; i < color_palette_size[cs]; ++i) {
+			sprintf(hexcol, "#%02X%02X%02X", color_palette[cs][i].r, color_palette[cs][i].g, color_palette[cs][i].b);
+			cJSON_AddItemToArray(cJSON_GetArrayItem(cols, cs), cJSON_CreateString(hexcol));
+		}
+	}
 
-    const char *cols_json = cJSON_Print(root);
-    httpd_resp_sendstr(req, cols_json);
-    free((void *)cols_json);
-    cJSON_Delete(root);
-    return ESP_OK;
+	const char *cols_json = cJSON_Print(root);
+	httpd_resp_sendstr(req, cols_json);
+	free((void *)cols_json);
+	cJSON_Delete(root);
+	return ESP_OK;
 }
 
 
@@ -195,7 +192,9 @@ static esp_err_t lc_config_get_handler(httpd_req_t *req)
 
     cJSON_AddNumberToObject(root, "brightness", lc_config.set_bright);
     cJSON_AddNumberToObject(root, "color", lc_config.color);
+    cJSON_AddNumberToObject(root, "color_palette", lc_config.color_palette);
     cJSON_AddNumberToObject(root, "remote_onoff", lc_config.remote_onoff);
+    cJSON_AddNumberToObject(root, "num_palettes", num_color_palettes);
 
     const char *conf_json = cJSON_Print(root);
     httpd_resp_sendstr(req, conf_json);
@@ -209,51 +208,58 @@ static esp_err_t lc_config_get_handler(httpd_req_t *req)
 static esp_err_t lc_coldef_post_handler(httpd_req_t *req)
 {
 	int col_r, col_g, col_b;
-    int total_len = req->content_len;
-    int cur_len = 0;
-    char *buf = ((rest_server_context_t *)(req->user_ctx))->scratch;
-    int received = 0;
-    if (total_len >= SCRATCH_BUFSIZE) {
-        /* Respond with 500 Internal Server Error */
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "content too long");
-        return ESP_FAIL;
-    }
-    while (cur_len < total_len) {
-        received = httpd_req_recv(req, buf + cur_len, total_len);
-        if (received <= 0) {
-            /* Respond with 500 Internal Server Error */
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to post control value");
-            return ESP_FAIL;
-        }
-        cur_len += received;
-    }
-    buf[total_len] = '\0';
+	int total_len = req->content_len;
+	int cur_len = 0;
+	char *buf = ((rest_server_context_t *)(req->user_ctx))->scratch;
+	int received = 0;
+	if (total_len >= SCRATCH_BUFSIZE) {
+		/* Respond with 500 Internal Server Error */
+		httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "content too long");
+		return ESP_FAIL;
+	}
+	while (cur_len < total_len) {
+		received = httpd_req_recv(req, buf + cur_len, total_len);
+		if (received <= 0) {
+			/* Respond with 500 Internal Server Error */
+			httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to post control value");
+			return ESP_FAIL;
+		}
+		cur_len += received;
+	}
+	buf[total_len] = '\0';
 
-    cJSON *root = cJSON_Parse(buf);
-    int color_id = cJSON_GetObjectItem(root, "color_id")->valueint;
-    char *hexcolor = cJSON_GetObjectItem(root, "hexvalue")->valuestring;
-    if (3 != sscanf(hexcolor, "#%2X%2X%2X", &col_r, &col_g, &col_b) || color_id > color_schedule_size) {
-            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Invalid color definition");
-            return ESP_FAIL;
-    }
+	cJSON *root = cJSON_Parse(buf);
+	int color_id = cJSON_GetObjectItem(root, "color_id")->valueint;
+	int cs = cJSON_GetObjectItem(root, "color_palette")->valueint;
+	char *hexcolor = cJSON_GetObjectItem(root, "hexvalue")->valuestring;
+	if (3 != sscanf(hexcolor, "#%2X%2X%2X", &col_r, &col_g, &col_b) || cs > num_color_palettes || color_id > color_palette_size[cs]) {
+		httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Invalid color definition");
+		return ESP_FAIL;
+	}
 
-    color_schedule[color_id].r = col_r;
-    color_schedule[color_id].g = col_g;
-    color_schedule[color_id].b = col_b;
-    ESP_LOGI(REST_TAG, "LC coldef: color = %d,%d,%d, color_id = %d", col_r, col_g, col_b, color_id);
-    cJSON_Delete(root);
-    httpd_resp_sendstr(req, "Post control value successfully");
+	color_palette[cs][color_id].r = col_r;
+	color_palette[cs][color_id].g = col_g;
+	color_palette[cs][color_id].b = col_b;
+	ESP_LOGI(LOGTAG_REST, "LC coldef: color = %d,%d,%d, color_id = %d, color_palette = %d", col_r, col_g, col_b, color_id, cs);
+	cJSON_Delete(root);
+	httpd_resp_sendstr(req, "Post control value successfully");
 
-    nvs_update_coldef("alx.lcc", color_id);
+	nvs_update_coldef("alx.lcc", cs, color_id);
 
-    return ESP_OK;
+	return ESP_OK;
 }
 
 
 esp_err_t start_rest_server(const char *base_path, int core_id) {
-    REST_CHECK(base_path, "wrong base path", err);
-    rest_server_context_t *rest_context = calloc(1, sizeof(rest_server_context_t));
-    REST_CHECK(rest_context, "No memory for rest context", err);
+    if (NULL == base_path) {
+            ESP_LOGE(LOGTAG_REST, "wrong base path");
+            return ESP_FAIL;
+    }
+    rest_server_context_t *rest_context = (rest_server_context_t *)calloc(1, sizeof(rest_server_context_t));
+    if (NULL == rest_context) {
+            ESP_LOGE(LOGTAG_REST, "No memory for rest context");
+            return ESP_FAIL;
+    }
     strlcpy(rest_context->base_path, base_path, sizeof(rest_context->base_path));
 
     httpd_handle_t server = NULL;
@@ -261,8 +267,12 @@ esp_err_t start_rest_server(const char *base_path, int core_id) {
     config.uri_match_fn = httpd_uri_match_wildcard;
     config.core_id = core_id;
 
-    ESP_LOGI(REST_TAG, "Starting HTTP Server");
-    REST_CHECK(httpd_start(&server, &config) == ESP_OK, "Start server failed", err_start);
+    ESP_LOGI(LOGTAG_REST, "Starting HTTP Server");
+    if (ESP_OK != httpd_start(&server, &config)) {
+            ESP_LOGE(LOGTAG_REST, "Start server failed");
+            free(rest_context);
+            return ESP_FAIL;
+    }
 
     /* URI handler for getting light controller config */
     httpd_uri_t lc_config_get_uri = {
@@ -311,8 +321,4 @@ esp_err_t start_rest_server(const char *base_path, int core_id) {
     httpd_register_uri_handler(server, &common_get_uri);
 
     return ESP_OK;
-err_start:
-    free(rest_context);
-err:
-    return ESP_FAIL;
 }
