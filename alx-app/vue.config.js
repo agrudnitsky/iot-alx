@@ -4,7 +4,7 @@ module.exports = {
   configureWebpack: {
     plugins: [
       new VuetifyLoaderPlugin()
-    ],
+    ]
   },
-  productionSourceMap: false,
+  productionSourceMap: false
 }
