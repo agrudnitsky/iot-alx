@@ -22,12 +22,13 @@
   "devDependencies": {
     "@mdi/font": "^4.4.95",
     "@vue/cli-plugin-babel": "^3.11.0",
-    "@vue/cli-plugin-eslint": "^3.11.0",
+    "@vue/cli-plugin-eslint": "^3.12.1",
     "@vue/cli-service": "^3.11.0",
+    "@vue/eslint-config-standard": "^4.0.0",
     "babel-eslint": "^10.0.1",
     "deepmerge": "^4.0.0",
     "eslint": "^5.16.0",
-    "eslint-plugin-vue": "^5.0.0",
+    "eslint-plugin-vue": "^5.2.3",
     "fibers": "^4.0.1",
     "raw-loader": "^3.1.0",
     "sass": "^1.22.12",
@@ -41,11 +42,10 @@
     },
     "extends": [
       "plugin:vue/essential",
-      "eslint:recommended"
+      "eslint:recommended",
+      "@vue/standard"
     ],
-    "rules": {
-      "no-console": 0
-    },
+    "rules": {},
     "parserOptions": {
       "parser": "babel-eslint"
     }
