@@ -20,7 +20,7 @@
 extern lc_config_t lc_config;
 extern int num_color_palettes;
 extern int color_palette_size[];
-extern CRGB *color_palette[];
+extern CRGB color_palette[][6];
 
 #define FILE_PATH_MAX (ESP_VFS_PATH_MAX + 128)
 #define SCRATCH_BUFSIZE (10240)
