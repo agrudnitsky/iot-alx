@@ -193,7 +193,6 @@ void netup_actions() {
 void house_keeper(void *arg) {
 	timer_event_t ev;
 	wifi_ap_record_t ap_info;
-	struct timeval now;
 
 	while (1) {
 		xQueueReceive(timer_queue, &ev, portMAX_DELAY);
