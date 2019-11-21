@@ -184,9 +184,9 @@ void tdc_color_lookup() {
 
 	for (i = 0; i < num_time_colors; ++i) {
 		if (secs_past_mn > time_colors[i][0]) {
-			next_palette = time_colors[i][0];
-			next_color = time_colors[i][1];
-			next_bright = time_colors[i][2];
+			next_palette = time_colors[i][1];
+			next_color = time_colors[i][2];
+			next_bright = time_colors[i][3];
 		}
 	}
 
