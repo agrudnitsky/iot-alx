@@ -206,10 +206,12 @@ esp_err_t _http_header_to_datetime(esp_http_client_event_t *ev) {
 	case HTTP_EVENT_ON_HEADER:
 		if (0 == strncmp("Date", ev->header_key, 4)) {
 			strptime((char *)ev->header_value, "%a, %d %b %Y %T", &htime);
+			ESP_LOGI(LOGTAG_MISC, "Datetime from HTTP: %s", ev->header_value);
 			now = mktime(&htime);
 			tv_now.tv_sec = now;
 			tz_cur.tz_minuteswest = TZ_OFFSET*60;
 			tz_cur.tz_dsttime = TZ_DST_CORRECTION;
+			/* TODO: remove tz_cur (obsolete), use other time zone management approach */
 			settimeofday(&tv_now, &tz_cur);
 		}
 		break;
