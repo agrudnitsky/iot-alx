@@ -137,7 +137,7 @@ static esp_err_t lc_config_post_handler(httpd_req_t *req)
             return ESP_FAIL;
     }
 
-    lc_config.set_mode = mode;
+    lc_config.set_mode = (lc_mode)mode;
     lc_config.set_bright = brightness;
     lc_config.color = color_id;
     lc_config.color_palette = cs;
@@ -147,6 +147,7 @@ static esp_err_t lc_config_post_handler(httpd_req_t *req)
     httpd_resp_sendstr(req, "Post control value successfully");
 
     /* store new values to NVS */
+    nvs_update_config("alx.lcc", "mode", mode);
     nvs_update_config("alx.lcc", "set_bright", brightness);
     nvs_update_config("alx.lcc", "color", color_id);
     nvs_update_config("alx.lcc", "color_palette", cs);

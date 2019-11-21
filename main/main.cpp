@@ -296,6 +296,7 @@ void init_lc(lc_state_t *lcs, lc_config_t *lcc) {
 		return;
 	}
 	/* config */
+	nvs_get_i32(nvsh_load, "mode", (int *)&(lcc->set_mode));
 	nvs_get_i32(nvsh_load, "set_bright", &(lcc->set_bright));
 	nvs_get_i32(nvsh_load, "color", &(lcc->color));
 	nvs_get_i32(nvsh_load, "color_palette", &(lcc->color_palette));
