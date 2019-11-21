@@ -128,7 +128,7 @@ void room_lights(void *arg){
 			if (lc_config.set_bright <= ++lc_state.brightness) lc_state.mode = CONSTANT;
 			break;
 		case CONSTANT:
-		case TIME_DEPENDANT_COLORS:
+		case TIME_DEPENDENT_COLORS:
 		default:
 			lc_state.brightness = lc_config.set_bright;
 			lc_state.scheduled_color = lc_config.color;
@@ -265,7 +265,7 @@ void init_lc(lc_state_t *lcs, lc_config_t *lcc) {
 
 	/* mode helper functions */
 	for (i = 0; i < LC_LAST_MODE; ++i) mode_helper_fun[i] = NULL;
-	mode_helper_fun[TIME_DEPENDANT_COLORS] = tdc_color_lookup;
+	mode_helper_fun[TIME_DEPENDENT_COLORS] = tdc_color_lookup;
 
 	/* color palettes */
 	for (i = 0; i < num_color_palettes; ++i) {
