@@ -125,7 +125,7 @@ void room_lights(void *arg){
 			if (1 >= (lc_state.brightness = dim8_lin(lc_state.brightness))) lc_state.mode = LIGHTS_OFF;
 			break;
 		case LIGHTS_POWER_UP:
-			if (lc_config.set_bright <= ++lc_state.brightness) lc_state.mode = CONSTANT;
+			if (lc_config.set_bright <= ++lc_state.brightness) lc_state.mode = lc_config.set_mode;
 			break;
 		case CONSTANT:
 		case TIME_DEPENDENT_COLORS:
