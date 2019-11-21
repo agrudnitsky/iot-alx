@@ -6,6 +6,16 @@
 
     <v-content>
       <v-container>
+
+        <v-card class="mx-auto" min-width="350">
+          Mode
+          <v-btn-toggle mandatory="true">
+            <v-btn v-on:click="set_mode(0)" v-bind:active="mode==0">Constant</v-btn>
+            <v-btn v-on:click="set_mode(6)" v-bind:active="mode==6">Time-Dependant</v-btn>
+          </v-btn-toggle>
+
+        </v-card>
+
         <v-card class="mx-auto" min-width="350">
           <v-container>
             <v-row>
@@ -59,6 +69,7 @@ export default {
   name: 'app',
   data: () => ({
     version: process.env.VUE_APP_VERSION,
+    mode: 0,
     brightness: 90,
     color_id: 0,
     remote_onoff: 1,
@@ -85,6 +96,7 @@ export default {
       this.axios
         .get('/api/v1/lc/getconfig')
         .then(response => {
+          this.mode = response.data.mode,
           this.brightness = response.data.brightness,
           this.color_id = response.data.color,
           this.color_palette = response.data.color_palette,
@@ -101,6 +113,7 @@ export default {
     update_lc_config: function () {
       this.axios
         .post('/api/v1/lc/setconfig', {
+          mode: this.mode,
           brightness: this.brightness,
           color_id: this.color_id,
           color_palette: this.color_palette,
@@ -133,6 +146,10 @@ export default {
       } else {
         this.color_palette = (this.color_palette + val) % this.num_palettes
       }
+    },
+    set_mode: function (val) {
+      this.mode = val
+      this.update_lc_config()
     },
     cb_action: function (val) {
       if (this.edit_mode) {

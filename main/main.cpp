@@ -26,11 +26,23 @@ static int schedule_netup_actions = 0;
 
 const char *version = VERSION;
 
+void (*mode_helper_fun[LC_LAST_MODE])();
 
 esp_http_client_config_t http_client_conf = {
 	.url = "http://www.google.com/",
 	.event_handler = _http_header_to_datetime,
 };
+
+/* format: secs past midnight, palette, color_id, brightness */
+int time_colors[6][4] = {
+	{( 5*60 +  0*60)*60, 1, 1,  90},
+	{( 8*60 +  0*60)*60, 1, 2, 200},
+	{(12*60 + 30*60)*60, 1, 3, 240},
+	{(16*60 + 30*60)*60, 1, 4, 240},
+	{(21*60 + 30*60)*60, 1, 5, 140},
+	{( 0*60 + 30*60)*60, 1, 0,  90}
+};
+int num_time_colors = sizeof(time_colors)/sizeof(time_colors[0]);
 
 
 extern "C" {
@@ -116,10 +128,12 @@ void room_lights(void *arg){
 			if (lc_config.set_bright <= ++lc_state.brightness) lc_state.mode = CONSTANT;
 			break;
 		case CONSTANT:
+		case TIME_DEPENDANT_COLORS:
 		default:
 			lc_state.brightness = lc_config.set_bright;
 			lc_state.scheduled_color = lc_config.color;
 			lc_state.color_palette = lc_config.color_palette;
+			lc_state.mode = lc_config.set_mode;
 			break;
 		};
 
@@ -149,6 +163,36 @@ void room_lights(void *arg){
 		}
 		lc_state.remote_onoff = lc_config.remote_onoff;
 	}
+}
+
+
+void tdc_color_lookup() {
+	int i;
+	struct timeval now_te;
+	time_t now_ts;
+	struct tm *now;
+	int secs_past_mn;
+	int next_palette = lc_config.color_palette;
+	int next_color = lc_config.color;
+	int next_bright = lc_config.set_bright;
+
+	gettimeofday(&now_te, NULL);
+	now_ts = now_te.tv_sec;
+	now = localtime(&now_ts);
+	secs_past_mn = now->tm_hour*3600 + now->tm_min*60 + now->tm_sec;
+	ESP_LOGI(LOGTAG_MISC, "now: %d:%02d:%02d", now->tm_hour, now->tm_min, now->tm_sec);
+
+	for (i = 0; i < num_time_colors; ++i) {
+		if (secs_past_mn > time_colors[i][0]) {
+			next_palette = time_colors[i][0];
+			next_color = time_colors[i][1];
+			next_bright = time_colors[i][2];
+		}
+	}
+
+	lc_config.color_palette = next_palette;
+	lc_config.color = next_color;
+	lc_config.set_bright = next_bright;
 }
 
 
@@ -202,6 +246,11 @@ void house_keeper(void *arg) {
 			netup_actions();
 			schedule_netup_actions = 0;
 		}
+
+		if (NULL != mode_helper_fun[lc_state.mode]) {
+			mode_helper_fun[lc_state.mode]();
+		}
+
 	}
 }
 
@@ -212,10 +261,16 @@ void init_lc(lc_state_t *lcs, lc_config_t *lcc) {
 	char key[11];
 	uint32_t colval;
 
+	/* mode helper functions */
+	for (i = 0; i < LC_LAST_MODE; ++i) mode_helper_fun[i] = NULL;
+	mode_helper_fun[TIME_DEPENDANT_COLORS] = tdc_color_lookup;
+
+	/* color palettes */
 	for (i = 0; i < num_color_palettes; ++i) {
 		color_palette_size[i] = sizeof(color_palette[i])/sizeof(color_palette[i][0]);
 	}
 
+	/* LC state / LC config defaults */
 	lcs->brightness = 0;
 	lcs->scheduled_color = 0;
 	lcs->color_palette = 0;
