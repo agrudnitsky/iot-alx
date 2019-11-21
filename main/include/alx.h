@@ -43,8 +43,6 @@
 #define HKT_INTERVAL 5
 
 
-
-
 typedef struct {
 	timer_group_t group;
 	int id;
