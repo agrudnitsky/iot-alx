@@ -34,7 +34,7 @@ esp_http_client_config_t http_client_conf = {
 };
 
 /* format: secs past midnight, palette, color_id, brightness */
-int time_colors[6][4] = {
+tdc_entry_t time_colors[6] = {
 	{( 0*60 + 30)*60, 1, 0,  90},
 	{( 5*60 +  0)*60, 1, 1,  90},
 	{( 8*60 +  0)*60, 1, 2, 200},
@@ -183,10 +183,10 @@ void tdc_color_lookup() {
 	ESP_LOGI(LOGTAG_MISC, "now: %d:%02d:%02d", now->tm_hour, now->tm_min, now->tm_sec);
 
 	for (i = 0; i < num_time_colors; ++i) {
-		if (secs_past_mn > time_colors[i][0]) {
-			next_palette = time_colors[i][1];
-			next_color = time_colors[i][2];
-			next_bright = time_colors[i][3];
+		if (secs_past_mn > time_colors[i].secs_past_mn) {
+			next_palette = time_colors[i].palette;
+			next_color = time_colors[i].color_id;
+			next_bright = time_colors[i].brightness;
 		}
 	}
 
