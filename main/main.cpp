@@ -175,6 +175,11 @@ void tdc_color_lookup() {
 	int next_palette = lc_config.color_palette;
 	int next_color = lc_config.color;
 	int next_bright = lc_config.set_bright;
+	int last_tdc_id = -1;
+	int next_tdc_id = -1;
+	int tdc_distance;
+	int secs_past_last_tdc;
+	int time_progress;
 
 	gettimeofday(&now_te, NULL);
 	now_ts = now_te.tv_sec;
@@ -184,15 +189,31 @@ void tdc_color_lookup() {
 
 	for (i = 0; i < num_time_colors; ++i) {
 		if (secs_past_mn > time_colors[i].secs_past_mn) {
-			next_palette = time_colors[i].palette;
-			next_color = time_colors[i].color_id;
-			next_bright = time_colors[i].brightness;
+			last_tdc_id = i;
 		}
 	}
+	if (-1 == last_tdc_id) last_tdc_id = num_time_colors-1;
 
-	lc_config.color_palette = next_palette;
-	lc_config.color = next_color;
-	lc_config.set_bright = next_bright;
+	if (last_tdc_id == num_time_colors-1) {
+		next_tdc_id = 0;
+		tdc_distance = 24*60*60;
+	} else {
+		next_tdc_id = last_tdc_id + 1;
+	}
+	tdc_distance += time_colors[next_tdc_id].secs_past_mn - time_colors[last_tdc_id].secs_past_mn;
+
+	secs_past_last_tdc = secs_past_mn - time_colors[last_tdc_id].secs_past_mn;
+	if (secs_past_mn < time_colors[last_tdc_id].secs_past_mn) secs_past_last_tdc += 24*60*60;
+	time_progress = (100*secs_past_last_tdc) / tdc_distance;
+
+	/* interpolate brightness */
+	lc_config.set_bright = time_colors[last_tdc_id].brightness + time_progress*(time_colors[next_tdc_id].brightness - time_colors[last_tdc_id].brightness)/100;
+
+	lc_config.color_palette = time_colors[last_tdc_id].palette;
+	lc_config.color = time_colors[last_tdc_id].color;
+
+	ESP_LOGI(LOGTAG_LC, " palette: %d, color: %d, bright: %d (last: %d, next: %d), time_progress: %d (secs_past last_tdc: %d, tdc_distance: %d)", lc_config.color_palette, lc_config.color, lc_config.set_bright, time_colors[last_tdc_id].brightness, time_colors[next_tdc_id].brightness, time_progress, secs_past_last_tdc, tdc_distance);
+
 }
 
 

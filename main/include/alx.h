@@ -52,7 +52,7 @@ typedef struct {
 typedef struct {
 	int secs_past_mn;
 	int palette;
-	int color_id;
+	int color;
 	int brightness;
 } tdc_entry_t;
 
