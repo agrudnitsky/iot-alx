@@ -200,7 +200,6 @@ esp_err_t _http_header_to_datetime(esp_http_client_event_t *ev) {
 	struct tm htime;
 	time_t now;
 	struct timeval tv_now;
-	struct timezone tz_cur;
 
 	switch (ev->event_id) {
 	case HTTP_EVENT_ON_HEADER:
@@ -209,10 +208,13 @@ esp_err_t _http_header_to_datetime(esp_http_client_event_t *ev) {
 			ESP_LOGI(LOGTAG_MISC, "Datetime from HTTP: %s", ev->header_value);
 			now = mktime(&htime);
 			tv_now.tv_sec = now;
-			tz_cur.tz_minuteswest = TZ_OFFSET*60;
-			tz_cur.tz_dsttime = TZ_DST_CORRECTION;
-			/* TODO: remove tz_cur (obsolete), use other time zone management approach */
-			settimeofday(&tv_now, &tz_cur);
+			/* time from HTTP header should be in GMT,
+			 * thus we set the correct timezone after setting time */
+			settimeofday(&tv_now, NULL);
+
+			/* set timezone */
+			setenv("TZ", TZ_SPEC, 1);
+			tzset();
 		}
 		break;
 	case HTTP_EVENT_ERROR:
