@@ -26,11 +26,23 @@ static int schedule_netup_actions = 0;
 
 const char *version = VERSION;
 
+void (*mode_helper_fun[LC_LAST_MODE])();
 
 esp_http_client_config_t http_client_conf = {
 	.url = "http://www.google.com/",
 	.event_handler = _http_header_to_datetime,
 };
+
+/* format: secs past midnight, palette, color_id, brightness */
+tdc_entry_t time_colors[6] = {
+	{( 0*60 + 30)*60, 1, 0,  90},
+	{( 5*60 +  0)*60, 1, 1,  90},
+	{( 8*60 +  0)*60, 1, 2, 200},
+	{(12*60 + 30)*60, 1, 3, 240},
+	{(16*60 + 30)*60, 1, 4, 240},
+	{(21*60 + 30)*60, 1, 5, 140}
+};
+int num_time_colors = sizeof(time_colors)/sizeof(time_colors[0]);
 
 
 extern "C" {
@@ -113,13 +125,16 @@ void room_lights(void *arg){
 			if (1 >= (lc_state.brightness = dim8_lin(lc_state.brightness))) lc_state.mode = LIGHTS_OFF;
 			break;
 		case LIGHTS_POWER_UP:
-			if (lc_config.set_bright <= ++lc_state.brightness) lc_state.mode = CONSTANT;
+			if (lc_config.set_bright <= ++lc_state.brightness) lc_state.mode = lc_config.set_mode;
 			break;
 		case CONSTANT:
+			lc_config.use_transient_color = 0;
+		case TIME_DEPENDENT_COLORS:
 		default:
 			lc_state.brightness = lc_config.set_bright;
 			lc_state.scheduled_color = lc_config.color;
 			lc_state.color_palette = lc_config.color_palette;
+			lc_state.mode = lc_config.set_mode;
 			break;
 		};
 
@@ -127,7 +142,11 @@ void room_lights(void *arg){
 		if (lc_state.brightness < 0) lc_state.brightness = lc_config.set_bright;
 
 		FastLED.setBrightness(lc_state.brightness);
-		refresh_leds(color_palette[lc_state.color_palette][lc_state.scheduled_color]);
+		if (lc_state.use_transient_color) {
+			refresh_leds(lc_state.transient_color);
+		} else {
+			refresh_leds(color_palette[lc_state.color_palette][lc_state.scheduled_color]);
+		}
 
 		on_off_switch = gpio_get_level(GPIO_NUM_32);
 		if ((!on_off_switch && lc_state.on_off_switch)
@@ -152,21 +171,82 @@ void room_lights(void *arg){
 }
 
 
+void tdc_color_lookup() {
+	int i;
+	struct timeval now_te;
+	time_t now_ts;
+	struct tm *now;
+	int secs_past_mn;
+	int next_palette = lc_config.color_palette;
+	int next_color = lc_config.color;
+	int next_bright = lc_config.set_bright;
+	int last_tdc_id = -1;
+	int next_tdc_id = -1;
+	int tdc_distance = 0;
+	int secs_past_last_tdc;
+	int time_progress;
+
+	gettimeofday(&now_te, NULL);
+	now_ts = now_te.tv_sec;
+	now = localtime(&now_ts);
+	secs_past_mn = now->tm_hour*3600 + now->tm_min*60 + now->tm_sec;
+	ESP_LOGI(LOGTAG_MISC, "now: %d:%02d:%02d", now->tm_hour, now->tm_min, now->tm_sec);
+
+	for (i = 0; i < num_time_colors; ++i) {
+		if (secs_past_mn > time_colors[i].secs_past_mn) {
+			last_tdc_id = i;
+		}
+	}
+	if (-1 == last_tdc_id) last_tdc_id = num_time_colors-1;
+
+	if (last_tdc_id == num_time_colors-1) {
+		next_tdc_id = 0;
+		tdc_distance = 24*60*60;
+	} else {
+		next_tdc_id = last_tdc_id + 1;
+	}
+	tdc_distance += time_colors[next_tdc_id].secs_past_mn - time_colors[last_tdc_id].secs_past_mn;
+
+	secs_past_last_tdc = secs_past_mn - time_colors[last_tdc_id].secs_past_mn;
+	if (secs_past_mn < time_colors[last_tdc_id].secs_past_mn) secs_past_last_tdc += 24*60*60;
+	time_progress = (100*secs_past_last_tdc) / tdc_distance;
+
+	/* interpolate brightness */
+	lc_config.set_bright = time_colors[last_tdc_id].brightness + time_progress*(time_colors[next_tdc_id].brightness - time_colors[last_tdc_id].brightness)/100;
+
+	lc_config.color_palette = time_colors[last_tdc_id].palette;
+	lc_config.color = time_colors[last_tdc_id].color;
+
+	/* interpolate color */
+	/* XXX: not sure if we should do this in HSV
+	 * this would probably require all LED operations to be done in HSV, though
+	 */
+	lc_state.use_transient_color = 1;
+	lc_state.transient_color.red = color_palette[time_colors[last_tdc_id].palette][time_colors[last_tdc_id].color].red + time_progress*(color_palette[time_colors[next_tdc_id].palette][time_colors[next_tdc_id].color].red - color_palette[time_colors[last_tdc_id].palette][time_colors[last_tdc_id].color].red)/100;
+	lc_state.transient_color.green = color_palette[time_colors[last_tdc_id].palette][time_colors[last_tdc_id].color].green + time_progress*(color_palette[time_colors[next_tdc_id].palette][time_colors[next_tdc_id].color].green - color_palette[time_colors[last_tdc_id].palette][time_colors[last_tdc_id].color].green)/100;
+	lc_state.transient_color.blue = color_palette[time_colors[last_tdc_id].palette][time_colors[last_tdc_id].color].blue + time_progress*(color_palette[time_colors[next_tdc_id].palette][time_colors[next_tdc_id].color].blue - color_palette[time_colors[last_tdc_id].palette][time_colors[last_tdc_id].color].blue)/100;
+}
+
+
 esp_err_t _http_header_to_datetime(esp_http_client_event_t *ev) {
 	struct tm htime;
 	time_t now;
 	struct timeval tv_now;
-	struct timezone tz_cur;
 
 	switch (ev->event_id) {
 	case HTTP_EVENT_ON_HEADER:
 		if (0 == strncmp("Date", ev->header_key, 4)) {
 			strptime((char *)ev->header_value, "%a, %d %b %Y %T", &htime);
+			ESP_LOGI(LOGTAG_MISC, "Datetime from HTTP: %s", ev->header_value);
 			now = mktime(&htime);
 			tv_now.tv_sec = now;
-			tz_cur.tz_minuteswest = TZ_OFFSET*60;
-			tz_cur.tz_dsttime = TZ_DST_CORRECTION;
-			settimeofday(&tv_now, &tz_cur);
+			/* time from HTTP header should be in GMT,
+			 * thus we set the correct timezone after setting time */
+			settimeofday(&tv_now, NULL);
+
+			/* set timezone */
+			setenv("TZ", TZ_SPEC, 1);
+			tzset();
 		}
 		break;
 	case HTTP_EVENT_ERROR:
@@ -202,6 +282,11 @@ void house_keeper(void *arg) {
 			netup_actions();
 			schedule_netup_actions = 0;
 		}
+
+		if (NULL != mode_helper_fun[lc_state.mode]) {
+			mode_helper_fun[lc_state.mode]();
+		}
+
 	}
 }
 
@@ -212,10 +297,16 @@ void init_lc(lc_state_t *lcs, lc_config_t *lcc) {
 	char key[11];
 	uint32_t colval;
 
+	/* mode helper functions */
+	for (i = 0; i < LC_LAST_MODE; ++i) mode_helper_fun[i] = NULL;
+	mode_helper_fun[TIME_DEPENDENT_COLORS] = tdc_color_lookup;
+
+	/* color palettes */
 	for (i = 0; i < num_color_palettes; ++i) {
 		color_palette_size[i] = sizeof(color_palette[i])/sizeof(color_palette[i][0]);
 	}
 
+	/* LC state / LC config defaults */
 	lcs->brightness = 0;
 	lcs->scheduled_color = 0;
 	lcs->color_palette = 0;
@@ -239,6 +330,7 @@ void init_lc(lc_state_t *lcs, lc_config_t *lcc) {
 		return;
 	}
 	/* config */
+	nvs_get_i32(nvsh_load, "mode", (int *)&(lcc->set_mode));
 	nvs_get_i32(nvsh_load, "set_bright", &(lcc->set_bright));
 	nvs_get_i32(nvsh_load, "color", &(lcc->color));
 	nvs_get_i32(nvsh_load, "color_palette", &(lcc->color_palette));

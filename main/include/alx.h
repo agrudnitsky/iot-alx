@@ -43,14 +43,18 @@
 #define HKT_INTERVAL 5
 
 
-
-
 typedef struct {
 	timer_group_t group;
 	int id;
 	uint64_t counter_value;
 } timer_event_t;
 
+typedef struct {
+	int secs_past_mn;
+	int palette;
+	int color;
+	int brightness;
+} tdc_entry_t;
 
 /* forward declarations */
 void reinit_net();
