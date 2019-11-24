@@ -128,6 +128,7 @@ void room_lights(void *arg){
 			if (lc_config.set_bright <= ++lc_state.brightness) lc_state.mode = lc_config.set_mode;
 			break;
 		case CONSTANT:
+			lc_config.use_transient_color = 0;
 		case TIME_DEPENDENT_COLORS:
 		default:
 			lc_state.brightness = lc_config.set_bright;
@@ -141,7 +142,11 @@ void room_lights(void *arg){
 		if (lc_state.brightness < 0) lc_state.brightness = lc_config.set_bright;
 
 		FastLED.setBrightness(lc_state.brightness);
-		refresh_leds(color_palette[lc_state.color_palette][lc_state.scheduled_color]);
+		if (lc_state.use_transient_color) {
+			refresh_leds(lc_state.transient_color);
+		} else {
+			refresh_leds(color_palette[lc_state.color_palette][lc_state.scheduled_color]);
+		}
 
 		on_off_switch = gpio_get_level(GPIO_NUM_32);
 		if ((!on_off_switch && lc_state.on_off_switch)
@@ -177,7 +182,7 @@ void tdc_color_lookup() {
 	int next_bright = lc_config.set_bright;
 	int last_tdc_id = -1;
 	int next_tdc_id = -1;
-	int tdc_distance;
+	int tdc_distance = 0;
 	int secs_past_last_tdc;
 	int time_progress;
 
@@ -194,6 +199,7 @@ void tdc_color_lookup() {
 	}
 	if (-1 == last_tdc_id) last_tdc_id = num_time_colors-1;
 
+	ESP_LOGI(LOGTAG_MISC, "last_tdc_id = %d, num_time_colors = %d", last_tdc_id, num_time_colors);
 	if (last_tdc_id == num_time_colors-1) {
 		next_tdc_id = 0;
 		tdc_distance = 24*60*60;
@@ -212,8 +218,17 @@ void tdc_color_lookup() {
 	lc_config.color_palette = time_colors[last_tdc_id].palette;
 	lc_config.color = time_colors[last_tdc_id].color;
 
-	ESP_LOGI(LOGTAG_LC, " palette: %d, color: %d, bright: %d (last: %d, next: %d), time_progress: %d (secs_past last_tdc: %d, tdc_distance: %d)", lc_config.color_palette, lc_config.color, lc_config.set_bright, time_colors[last_tdc_id].brightness, time_colors[next_tdc_id].brightness, time_progress, secs_past_last_tdc, tdc_distance);
+	/* interpolate color */
+	/* XXX: not sure if we should do this in HSV
+	 * this would probably require all LED operations to be done in HSV, though
+	 */
+	lc_state.use_transient_color = 1;
+	lc_state.transient_color.red = color_palette[time_colors[last_tdc_id].palette][time_colors[last_tdc_id].color].red + time_progress*(color_palette[time_colors[next_tdc_id].palette][time_colors[next_tdc_id].color].red - color_palette[time_colors[last_tdc_id].palette][time_colors[last_tdc_id].color].red)/100;
+	lc_state.transient_color.green = color_palette[time_colors[last_tdc_id].palette][time_colors[last_tdc_id].color].green + time_progress*(color_palette[time_colors[next_tdc_id].palette][time_colors[next_tdc_id].color].green - color_palette[time_colors[last_tdc_id].palette][time_colors[last_tdc_id].color].green)/100;
+	lc_state.transient_color.blue = color_palette[time_colors[last_tdc_id].palette][time_colors[last_tdc_id].color].blue + time_progress*(color_palette[time_colors[next_tdc_id].palette][time_colors[next_tdc_id].color].blue - color_palette[time_colors[last_tdc_id].palette][time_colors[last_tdc_id].color].blue)/100;
 
+	ESP_LOGI(LOGTAG_LC, " palette: %d, color: %d, bright: %d (last: %d, next: %d), time_progress: %d (secs_past last_tdc: %d, tdc_distance: %d)", lc_config.color_palette, lc_config.color, lc_config.set_bright, time_colors[last_tdc_id].brightness, time_colors[next_tdc_id].brightness, time_progress, secs_past_last_tdc, tdc_distance);
+	ESP_LOGI(LOGTAG_LC, " color: (%d, %d, %d), transient(%d): (%d, %d, %d)", color_palette[lc_config.color_palette][lc_config.color].red, color_palette[lc_config.color_palette][lc_config.color].green, color_palette[lc_config.color_palette][lc_config.color].blue, lc_state.use_transient_color, lc_state.transient_color.red, lc_state.transient_color.green, lc_state.transient_color.blue);
 }
 
 
