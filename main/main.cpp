@@ -199,7 +199,6 @@ void tdc_color_lookup() {
 	}
 	if (-1 == last_tdc_id) last_tdc_id = num_time_colors-1;
 
-	ESP_LOGI(LOGTAG_MISC, "last_tdc_id = %d, num_time_colors = %d", last_tdc_id, num_time_colors);
 	if (last_tdc_id == num_time_colors-1) {
 		next_tdc_id = 0;
 		tdc_distance = 24*60*60;
@@ -226,9 +225,6 @@ void tdc_color_lookup() {
 	lc_state.transient_color.red = color_palette[time_colors[last_tdc_id].palette][time_colors[last_tdc_id].color].red + time_progress*(color_palette[time_colors[next_tdc_id].palette][time_colors[next_tdc_id].color].red - color_palette[time_colors[last_tdc_id].palette][time_colors[last_tdc_id].color].red)/100;
 	lc_state.transient_color.green = color_palette[time_colors[last_tdc_id].palette][time_colors[last_tdc_id].color].green + time_progress*(color_palette[time_colors[next_tdc_id].palette][time_colors[next_tdc_id].color].green - color_palette[time_colors[last_tdc_id].palette][time_colors[last_tdc_id].color].green)/100;
 	lc_state.transient_color.blue = color_palette[time_colors[last_tdc_id].palette][time_colors[last_tdc_id].color].blue + time_progress*(color_palette[time_colors[next_tdc_id].palette][time_colors[next_tdc_id].color].blue - color_palette[time_colors[last_tdc_id].palette][time_colors[last_tdc_id].color].blue)/100;
-
-	ESP_LOGI(LOGTAG_LC, " palette: %d, color: %d, bright: %d (last: %d, next: %d), time_progress: %d (secs_past last_tdc: %d, tdc_distance: %d)", lc_config.color_palette, lc_config.color, lc_config.set_bright, time_colors[last_tdc_id].brightness, time_colors[next_tdc_id].brightness, time_progress, secs_past_last_tdc, tdc_distance);
-	ESP_LOGI(LOGTAG_LC, " color: (%d, %d, %d), transient(%d): (%d, %d, %d)", color_palette[lc_config.color_palette][lc_config.color].red, color_palette[lc_config.color_palette][lc_config.color].green, color_palette[lc_config.color_palette][lc_config.color].blue, lc_state.use_transient_color, lc_state.transient_color.red, lc_state.transient_color.green, lc_state.transient_color.blue);
 }
 
 
