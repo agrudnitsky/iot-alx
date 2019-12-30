@@ -12,6 +12,7 @@
           <v-btn-toggle mandatory="true">
             <v-btn v-on:click="set_mode(0)" v-bind:active="mode==0">Constant</v-btn>
             <v-btn v-on:click="set_mode(6)" v-bind:active="mode==6">Time-Dependent</v-btn>
+            <v-btn v-on:click="set_mode(7)" v-bind:active="mode==7">XMas</v-btn>
           </v-btn-toggle>
 
         </v-card>

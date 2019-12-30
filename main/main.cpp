@@ -1,11 +1,16 @@
 #include "alx.h"
 #include "alx_types.h"
 #include "local_settings.h"
-
+#include "driver/ledc.h"
 
 xQueueHandle timer_queue;
 
-CRGB leds[NUM_LEDS];
+CRGB sleds_0[NUM_LEDS];
+CRGB sleds_1[NUM_LEDS];
+
+CRGB leds_0[NUM_LEDS];
+CRGB leds_1[NUM_LEDS];
+ledq_t ledq;
 
 CRGB color_palette[][6] = {
 	{CRGB::OrangeRed, CRGB::FloralWhite, CRGB::DeepPink,
@@ -100,20 +105,174 @@ void IRAM_ATTR timer_group0_isr(void *par) {
 }
 
 
-void refresh_leds(CRGB color) {
+uint32_t rand_bounded(unsigned int bound) {
+	return esp_random() % bound;
+}
+
+
+void flying_lights(ledq_t *q) {
+	int i;
+	CRGB tmp_led0;
+	CRGB tmp_led1;
+
+	switch (q->state) {
+	case 0: /* prepare next */
+		lc_config.color = rand_bounded(color_palette_size[lc_state.color_palette]);
+		q->state = 1;
+		q->tick = 0;
+		q->pos = 0;
+		q->reps = 0;
+		leds_0[q->pos] = color_palette[lc_config.color_palette][lc_config.color];
+		leds_1[q->pos] = color_palette[lc_config.color_palette][lc_config.color];
+		/* fall through */
+	case 1: /* flare up */
+		if (0 == (q->tick % 8)) {
+			leds_0[q->pos] = color_palette[lc_config.color_palette][lc_config.color];
+			leds_1[q->pos] = color_palette[lc_config.color_palette][lc_config.color];
+			leds_0[q->pos] /= 8-q->tick/8;
+			leds_1[q->pos] /= 8-q->tick/8;
+		}
+		q->tick++;
+		if (64 == q->tick) {
+			q->state = 2;
+			q->tick = 1;
+		}
+		break;
+	case 2: /* flying */
+		if (q->pos+1 >= q->num_leds || 10 == q->led_state[q->pos+1]) {
+			q->state = 3;
+			q->tick = 1;
+			q->led_state[q->pos] = 10;
+		} else if (2 == ++(q->tick)) {
+			q->tick = 1;
+			leds_0[q->pos] = CRGB::Black;
+			leds_1[q->pos] = CRGB::Black;
+			q->pos++;
+			leds_0[q->pos] = color_palette[lc_config.color_palette][lc_config.color];
+			leds_1[q->pos] = color_palette[lc_config.color_palette][lc_config.color];
+		}
+		break;
+	case 3: /* arrived */
+		q->tick = 1;
+		if (10 == q->led_state[0]) {
+			q->state = 4;
+		} else {
+			q->state = 0;
+		}
+		break;
+	case 4: /* ledq done */
+		if (q->tick++ > 100) {
+			q->state = 5;
+			q->tick = 1;
+		}
+		break;
+	case 5: /* rotate pattern */
+		if (0 == (q->tick % 3)) {
+			tmp_led0 = leds_0[0];
+			tmp_led1 = leds_1[0];
+			for (i = 0; i < q->num_leds-1; ++i) {
+				leds_0[i] = leds_0[i+1];
+				leds_1[i] = leds_1[i+1];
+			}
+			leds_0[q->num_leds-1] = tmp_led0;
+			leds_1[q->num_leds-1] = tmp_led1;
+		}
+		if (q->tick++ > 9*q->num_leds) {
+			/* prepare shadow leds for partial fade */
+			for (i = 0; i < q->num_leds; ++i) {
+				sleds_0[i] = leds_0[i];
+				sleds_1[i] = leds_1[i];
+			}
+			q->state = 6;
+			q->tick = 0;
+		}
+		break;
+	case 6: /* partial fade out from 0 */
+		if (0 == (q->tick % 4)) {
+			/* fade from 0 */
+			for (q->pos = 0; q->pos < q->num_leds; ++q->pos) {
+				if (2 == q->led_state[q->pos]) {
+					leds_0[q->pos] /= 2;
+					leds_1[q->pos] /= 2;
+				} else if (10 == q->led_state[q->pos]) {
+					q->led_state[q->pos] = 2;
+					break;
+				}
+			}
+		}
+		if (q->tick++ > 4*q->num_leds) {
+			for (i = 0; i < q->num_leds; ++i) {
+				q->led_state[i] = 2;
+			}
+			q->state = 7;
+			q->tick = 1;
+		}
+		break;
+	case 7: /* partial fade in from max led */
+		if (0 == (q->tick % 4)) {
+			/* fade from 0 */
+			for (q->pos = q->num_leds-1; q->pos >= 0; --q->pos) {
+				if (q->led_state[q->pos] < 10) {
+					leds_0[q->pos] = sleds_0[q->pos] / (10-q->led_state[q->pos]);
+					leds_1[q->pos] = sleds_1[q->pos] / (10-q->led_state[q->pos]);
+					if (2 == q->led_state[q->pos]++) break;
+				}
+			}
+		}
+		if (q->tick++ > 4*q->num_leds) {
+			for (i = 0; i < q->num_leds; ++i) {
+				q->led_state[i] = 10;
+			}
+			q->state = q->reps++ > 4 ? 8 : 6;
+			q->tick = 1;
+		}
+		break;
+	case 8: /* clear led strips */
+		if (0 == q->tick % 4) {
+			for (i = 0; i < q->num_leds; ++i) {
+				leds_0[i] /= 2;
+				leds_1[i] /= 2;
+			}
+		}
+		if (++q->tick > 32) {
+			for (i = 0; i < q->num_leds; ++i) {
+				leds_0[i] = CRGB::Black;
+				leds_1[i] = CRGB::Black;
+				q->led_state[i] = 0;
+			}
+			q->tick = 1;
+			q->state = 0;
+		}
+	default:
+		break;
+	};
+
+//	ESP_LOGI(LOGTAG_LC, "q->state: %d, q->tick: %d, q->pos: %d, palette: %d, color: %d\n", q->state, q->tick, q->pos, lc_config.color_palette, lc_config.color);
+}
+
+
+void set_all_leds(CRGB color) {
 	for(int i = 0; i < NUM_LEDS; i++) {
-		leds[i] = color;
+		leds_0[i] = color;
+		leds_1[i] = color;
 	}
+}
+
+
+void refresh_leds() {
+//	ESP_LOGI(LOGTAG_LC, "refresh_leds()\n");
 	FastLED.show();
-	FastLED.delay(lc_config.refresh_delay);
+//	FastLED.delay(lc_config.refresh_delay);
+	delay(lc_config.refresh_delay/2);
 }
 
 
 void room_lights(void *arg){
 	int on_off_switch = 0;
 
-	FastLED.addLeds<LED_TYPE, DATA_PIN, COLOR_ORDER>(leds, NUM_LEDS);
-	FastLED.setMaxPowerInVoltsAndMilliamps(5,3500);
+	FastLED.addLeds<LED_TYPE, DATA_PIN_0, COLOR_ORDER>(leds_0, NUM_LEDS);
+	FastLED.addLeds<LED_TYPE, DATA_PIN_1, COLOR_ORDER>(leds_1, NUM_LEDS);
+	FastLED.setMaxPowerInVoltsAndMilliamps(5, 8000);
 	FastLED.setCorrection(TypicalSMD5050);
 
 	while (1) {
@@ -127,28 +286,37 @@ void room_lights(void *arg){
 		case LIGHTS_POWER_UP:
 			if (lc_config.set_bright <= ++lc_state.brightness) lc_state.mode = lc_config.set_mode;
 			break;
+		case XMAS:
+			flying_lights(&ledq);
+			break;
 		case CONSTANT:
 			lc_config.use_transient_color = 0;
+			/* fall through */
 		case TIME_DEPENDENT_COLORS:
+			/* fall through */
 		default:
 			lc_state.brightness = lc_config.set_bright;
 			lc_state.scheduled_color = lc_config.color;
 			lc_state.color_palette = lc_config.color_palette;
-			lc_state.mode = lc_config.set_mode;
 			break;
 		};
+
+		lc_state.mode = lc_config.set_mode;
 
 		/* should never happen */
 		if (lc_state.brightness < 0) lc_state.brightness = lc_config.set_bright;
 
 		FastLED.setBrightness(lc_state.brightness);
-		if (lc_state.use_transient_color) {
-			refresh_leds(lc_state.transient_color);
-		} else {
-			refresh_leds(color_palette[lc_state.color_palette][lc_state.scheduled_color]);
+		if (XMAS != lc_state.mode) {
+			if (lc_state.use_transient_color) {
+				set_all_leds(lc_state.transient_color);
+			} else {
+				set_all_leds(color_palette[lc_state.color_palette][lc_state.scheduled_color]);
+			}
 		}
+		refresh_leds();
 
-		on_off_switch = gpio_get_level(GPIO_NUM_32);
+		on_off_switch = 1; //gpio_get_level(GPIO_NUM_32);
 		if ((!on_off_switch && lc_state.on_off_switch)
 		    || (!lc_config.remote_onoff && lc_state.remote_onoff)) {
 			/* 1 -> 0 */
@@ -310,7 +478,7 @@ void init_lc(lc_state_t *lcs, lc_config_t *lcc) {
 	lcs->brightness = 0;
 	lcs->scheduled_color = 0;
 	lcs->color_palette = 0;
-	lcs->on_off_switch = gpio_get_level(GPIO_NUM_32);
+	lcs->on_off_switch = 1;//gpio_get_level(GPIO_NUM_32);
 	lcs->remote_onoff = lcs->on_off_switch;
 	lcs->mode = lcs->on_off_switch ? CONSTANT : LIGHTS_OFF;
 
@@ -329,6 +497,11 @@ void init_lc(lc_state_t *lcs, lc_config_t *lcc) {
 		ESP_LOGW(LOGTAG_MISC, "failed opening nvs for loading");
 		return;
 	}
+
+	/* ledq */
+	ledq.led_state = (u_char *)calloc(1, NUM_LEDS);
+	ledq.num_leds = NUM_LEDS;
+	
 	/* config */
 	nvs_get_i32(nvsh_load, "mode", (int *)&(lcc->set_mode));
 	nvs_get_i32(nvsh_load, "set_bright", &(lcc->set_bright));
@@ -390,6 +563,15 @@ void nvs_lc_init() {
 
 void init_io() {
 	gpio_set_direction(GPIO_NUM_32, GPIO_MODE_INPUT);
+
+	gpio_config_t io_conf;
+	io_conf.intr_type = GPIO_INTR_DISABLE;
+	io_conf.mode = GPIO_MODE_OUTPUT;
+	io_conf.pin_bit_mask = ((1ULL<<DATA_PIN_0) | (1ULL<<DATA_PIN_1))
+;
+	io_conf.pull_down_en = GPIO_PULLDOWN_ENABLE;
+	io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+	gpio_config(&io_conf);
 }
 
 

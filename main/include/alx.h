@@ -56,6 +56,16 @@ typedef struct {
 	int brightness;
 } tdc_entry_t;
 
+typedef struct {
+	u_char* led_state;
+	int pos;
+	int num_leds;
+	int state;
+	int tick;
+	int reps;
+	CRGB color;
+} ledq_t;
+
 /* forward declarations */
 void reinit_net();
 void init_net();
