@@ -5,9 +5,6 @@
 
 xQueueHandle timer_queue;
 
-CRGB sleds_0[NUM_LEDS];
-CRGB sleds_1[NUM_LEDS];
-
 CRGB leds_0[NUM_LEDS];
 CRGB leds_1[NUM_LEDS];
 ledq_t ledq;

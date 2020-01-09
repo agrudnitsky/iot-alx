@@ -1,19 +1,27 @@
 #include "alx_types.h"
 
+CHSV pleds[NUM_LEDS];
+CHSV sleds[NUM_LEDS];
+
 void prepare_next_light(ledq_t *q) {
-	lc_config.color = rand_bounded(color_palette_size[lc_config.color_palette]);
-	leds_0[0] = color_palette[lc_config.color_palette][lc_config.color];
-	leds_1[0] = color_palette[lc_config.color_palette][lc_config.color];
+	CHSV new_col = CHSV(rand_bounded(256), 255, 255);
+	pleds[0] = new_col;
+
 	q->led_state[0] = 1;
 }
 
+
+int qsort_step(CHSV *l) {
+}
+
+
 void flying_lights(ledq_t *q) {
 	int i;
-	CRGB tmp_led0;
-	CRGB tmp_led1;
+	CHSV tmp_led;
 
 	switch (q->state) {
 	case 0: /* prepare and flare up */
+		q->reps = 0;
 		if (0 == q->preparing) {
 			prepare_next_light(q);
 			q->preparing = 1;
@@ -21,10 +29,7 @@ void flying_lights(ledq_t *q) {
 		if (q->preparing > 0) {
 			/* flare up */
 			if (0 == (q->preparing % 4)) {
-				leds_0[0] = color_palette[lc_config.color_palette][lc_config.color];
-				leds_1[0] = color_palette[lc_config.color_palette][lc_config.color];
-				leds_0[0] /= 8-q->preparing/4;
-				leds_1[0] /= 8-q->preparing/4;
+				pleds[0].val = 255/(q->preparing/4);
 			}
 
 			q->preparing++;
@@ -40,10 +45,8 @@ void flying_lights(ledq_t *q) {
 					q->led_state[i] = 10;
 					break;
 				} else {
-					leds_0[i+1] = leds_0[i];
-					leds_1[i+1] = leds_1[i];
-					leds_0[i] = CRGB::Black;
-					leds_1[i] = CRGB::Black;
+					pleds[i+1] = pleds[i];
+					pleds[i].val = 0;
 					q->led_state[i] = 0;
 					q->led_state[i+1] = 1;
 				}
@@ -63,20 +66,16 @@ void flying_lights(ledq_t *q) {
 		break;
 	case 5: /* rotate pattern */
 		if (0 == (q->tick % 3)) {
-			tmp_led0 = leds_0[0];
-			tmp_led1 = leds_1[0];
+			tmp_led = pleds[0];
 			for (i = 0; i < q->num_leds-1; ++i) {
-				leds_0[i] = leds_0[i+1];
-				leds_1[i] = leds_1[i+1];
+				pleds[i] = pleds[i+1];
 			}
-			leds_0[q->num_leds-1] = tmp_led0;
-			leds_1[q->num_leds-1] = tmp_led1;
+			pleds[q->num_leds-1] = tmp_led;
 		}
 		if (q->tick++ > 9*q->num_leds) {
 			/* prepare shadow leds for partial fade */
 			for (i = 0; i < q->num_leds; ++i) {
-				sleds_0[i] = leds_0[i];
-				sleds_1[i] = leds_1[i];
+				sleds[i] = pleds[i];
 			}
 			q->state = 6;
 			q->tick = 0;
@@ -87,8 +86,7 @@ void flying_lights(ledq_t *q) {
 			/* fade from 0 */
 			for (q->pos = 0; q->pos < q->num_leds; ++q->pos) {
 				if (2 == q->led_state[q->pos]) {
-					leds_0[q->pos] /= 2;
-					leds_1[q->pos] /= 2;
+					pleds[q->pos].val /= 2;
 				} else if (10 == q->led_state[q->pos]) {
 					q->led_state[q->pos] = 2;
 					break;
@@ -108,8 +106,7 @@ void flying_lights(ledq_t *q) {
 			/* fade from 0 */
 			for (q->pos = q->num_leds-1; q->pos >= 0; --q->pos) {
 				if (q->led_state[q->pos] < 10) {
-					leds_0[q->pos] = sleds_0[q->pos] / (10-q->led_state[q->pos]);
-					leds_1[q->pos] = sleds_1[q->pos] / (10-q->led_state[q->pos]);
+					pleds[q->pos].val = 255 / (10-q->led_state[q->pos]);
 					if (2 == q->led_state[q->pos]++) break;
 				}
 			}
@@ -118,21 +115,25 @@ void flying_lights(ledq_t *q) {
 			for (i = 0; i < q->num_leds; ++i) {
 				q->led_state[i] = 10;
 			}
-			q->state = q->reps++ > 2 ? 8 : 6;
+			q->state = q->reps++ > 1 ? 8 : 6;
 			q->tick = 1;
 		}
 		break;
-	case 8: /* clear led strips */
+	case 8: /* sort leds */
+		if (1 == qsort_step(pleds)) {
+			q->tick = 1;
+			q->state = 9;
+		}
+		break;
+	case 9: /* clear led strips */
 		if (0 == q->tick % 4) {
 			for (i = 0; i < q->num_leds; ++i) {
-				leds_0[i] /= 2;
-				leds_1[i] /= 2;
+				pleds[i].val /= 2;
 			}
 		}
 		if (++q->tick > 32) {
 			for (i = 0; i < q->num_leds; ++i) {
-				leds_0[i] = CRGB::Black;
-				leds_1[i] = CRGB::Black;
+				pleds[i].val = 0;
 				q->led_state[i] = 0;
 			}
 			q->tick = 1;
@@ -142,6 +143,10 @@ void flying_lights(ledq_t *q) {
 		break;
 	};
 
+	for (i = 0; i < q->num_leds; ++i) {
+		leds_0[i] = pleds[i];
+		leds_1[i] = pleds[i];
+	}
 //	ESP_LOGI(LOGTAG_LC, "q->state: %d, q->tick: %d, q->pos: %d, palette: %d, color: %d\n", q->state, q->tick, q->pos, lc_config.color_palette, lc_config.color);
 }
 
