@@ -12,6 +12,7 @@ void prepare_next_light(ledq_t *q) {
 
 
 int qsort_step(CHSV *l) {
+	return 1;
 }
 
 

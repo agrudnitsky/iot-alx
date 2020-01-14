@@ -157,7 +157,11 @@ void room_lights(void *arg){
 			break;
 		};
 
-		lc_state.mode = lc_config.set_mode;
+		/* TODO: check in LUT for "stable" modes instead of hard-coding */
+		if (lc_state.mode == CONSTANT || lc_state.mode == TIME_DEPENDENT_COLORS || lc_state.mode == XMAS) {
+			lc_state.mode = lc_config.set_mode;
+		}
+
 
 		/* should never happen */
 		if (lc_state.brightness < 0) lc_state.brightness = lc_config.set_bright;
@@ -172,7 +176,11 @@ void room_lights(void *arg){
 		}
 		refresh_leds();
 
-		on_off_switch = 1; //gpio_get_level(GPIO_NUM_32);
+#ifdef HW_ONOFF_SWITCH
+		on_off_switch = gpio_get_level(HW_ONOFF_SWITCH);
+#else
+		on_off_switch = 1;
+#endif
 		if ((!on_off_switch && lc_state.on_off_switch)
 		    || (!lc_config.remote_onoff && lc_state.remote_onoff)) {
 			/* 1 -> 0 */
@@ -334,7 +342,11 @@ void init_lc(lc_state_t *lcs, lc_config_t *lcc) {
 	lcs->brightness = 0;
 	lcs->scheduled_color = 0;
 	lcs->color_palette = 0;
-	lcs->on_off_switch = 1;//gpio_get_level(GPIO_NUM_32);
+#ifdef HW_ONOFF_SWITCH
+	lcs->on_off_switch = gpio_get_level(HW_ONOFF_SWITCH);
+#else
+	lcs->on_off_switch = 1;
+#endif
 	lcs->remote_onoff = lcs->on_off_switch;
 	lcs->mode = lcs->on_off_switch ? CONSTANT : LIGHTS_OFF;
 
@@ -418,7 +430,9 @@ void nvs_lc_init() {
 
 
 void init_io() {
+#ifdef HW_ONOFF_SWITCH
 	gpio_set_direction(GPIO_NUM_32, GPIO_MODE_INPUT);
+#endif
 
 	gpio_config_t io_conf;
 	io_conf.intr_type = GPIO_INTR_DISABLE;
