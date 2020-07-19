@@ -20,6 +20,7 @@
 #include <nvs_flash.h>
 #include <esp_spiffs.h>
 #include "esp_http_client.h"
+#include <esp_netif.h>
 
 #include <FastLED.h>
 
@@ -29,6 +30,9 @@
 
 #include <lwip/err.h>
 #include <lwip/sys.h>
+
+#include "local_settings.h"
+#include "alx_types.h"
 
 
 #define WIFI_MAXIMUM_RETRY 2
@@ -55,6 +59,9 @@ typedef struct {
 	int color;
 	int brightness;
 } tdc_entry_t;
+
+
+
 
 /* forward declarations */
 void reinit_net();

@@ -1,11 +1,13 @@
 #include "alx.h"
 #include "alx_types.h"
 #include "local_settings.h"
-
+#include "driver/ledc.h"
 
 xQueueHandle timer_queue;
 
-CRGB leds[NUM_LEDS];
+CRGB leds_0[NUM_LEDS];
+CRGB leds_1[NUM_LEDS];
+ledq_t ledq;
 
 CRGB color_palette[][6] = {
 	{CRGB::OrangeRed, CRGB::FloralWhite, CRGB::DeepPink,
@@ -33,6 +35,7 @@ esp_http_client_config_t http_client_conf = {
 	.event_handler = _http_header_to_datetime,
 };
 
+
 /* format: secs past midnight, palette, color_id, brightness */
 tdc_entry_t time_colors[6] = {
 	{( 0*60 + 30)*60, 1, 0,  90},
@@ -45,23 +48,32 @@ tdc_entry_t time_colors[6] = {
 int num_time_colors = sizeof(time_colors)/sizeof(time_colors[0]);
 
 
+esp_netif_t *wifi_netif;
+char *my_ip_str;
+const int my_ip_str_sz = 16;
+esp_event_handler_instance_t inst_any_id;
+esp_event_handler_instance_t inst_got_ip;
+int wifi_init_in_progress = 0;
+
+
 extern "C" {
 	void app_main();
 }
 
 
 static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
-	int conn_ret = 0;
+	esp_err_t conn_ret;
 
 	if (WIFI_EVENT == event_base) {
 		ESP_LOGI(LOGTAG_WIFI, "wifi event: %d", event_id);
 		if (WIFI_EVENT_STA_START == event_id) {
 			conn_ret = esp_wifi_connect();
-			ESP_LOGI(LOGTAG_WIFI, "conn_ret: %d", conn_ret);
+			ESP_LOGI(LOGTAG_WIFI, "conn try: %d, res: %d", s_retry_num, conn_ret);
 		} else if (WIFI_EVENT_STA_DISCONNECTED == event_id) {
 			if (s_retry_num < WIFI_MAXIMUM_RETRY) {
 				conn_ret = esp_wifi_connect();
-				ESP_LOGI(LOGTAG_WIFI, "conn_ret: %d", conn_ret);
+				wifi_event_sta_disconnected_t *ev = (wifi_event_sta_disconnected_t *)event_data;
+				ESP_LOGI(LOGTAG_WIFI, "conn try: %d, res: %d, reason: %d", s_retry_num, conn_ret, ev->reason);
 				xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
 				s_retry_num++;
 				ESP_LOGI(LOGTAG_WIFI, "AP connection retry");
@@ -70,7 +82,8 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
 		}
 	} else if (IP_EVENT == event_base && IP_EVENT_STA_GOT_IP == event_id) {
 		ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
-		ESP_LOGI(LOGTAG_WIFI, "got ip: %s", ip4addr_ntoa(&event->ip_info.ip));
+		my_ip_str = esp_ip4addr_ntoa(&event->ip_info.ip, my_ip_str, my_ip_str_sz);
+		ESP_LOGI(LOGTAG_WIFI, "got ip: %s", my_ip_str);
 		s_retry_num = 0;
 		xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
 		schedule_netup_actions = 1;
@@ -100,20 +113,33 @@ void IRAM_ATTR timer_group0_isr(void *par) {
 }
 
 
-void refresh_leds(CRGB color) {
+uint32_t rand_bounded(unsigned int bound) {
+	return esp_random() % bound;
+}
+
+
+void set_all_leds(CRGB color) {
 	for(int i = 0; i < NUM_LEDS; i++) {
-		leds[i] = color;
+		leds_0[i] = color;
+		leds_1[i] = color;
 	}
+}
+
+
+void refresh_leds() {
+//	ESP_LOGI(LOGTAG_LC, "refresh_leds()\n");
 	FastLED.show();
-	FastLED.delay(lc_config.refresh_delay);
+//	FastLED.delay(lc_config.refresh_delay);
+	delay(lc_config.refresh_delay/2);
 }
 
 
 void room_lights(void *arg){
 	int on_off_switch = 0;
 
-	FastLED.addLeds<LED_TYPE, DATA_PIN, COLOR_ORDER>(leds, NUM_LEDS);
-	FastLED.setMaxPowerInVoltsAndMilliamps(5,3500);
+	FastLED.addLeds<LED_TYPE, DATA_PIN_0, COLOR_ORDER>(leds_0, NUM_LEDS);
+	FastLED.addLeds<LED_TYPE, DATA_PIN_1, COLOR_ORDER>(leds_1, NUM_LEDS);
+	FastLED.setMaxPowerInVoltsAndMilliamps(5, 8000);
 	FastLED.setCorrection(TypicalSMD5050);
 
 	while (1) {
@@ -127,28 +153,45 @@ void room_lights(void *arg){
 		case LIGHTS_POWER_UP:
 			if (lc_config.set_bright <= ++lc_state.brightness) lc_state.mode = lc_config.set_mode;
 			break;
+		case XMAS:
+			flying_lights(&ledq);
+			break;
 		case CONSTANT:
 			lc_config.use_transient_color = 0;
+			/* fall through */
 		case TIME_DEPENDENT_COLORS:
+			/* fall through */
 		default:
 			lc_state.brightness = lc_config.set_bright;
 			lc_state.scheduled_color = lc_config.color;
 			lc_state.color_palette = lc_config.color_palette;
-			lc_state.mode = lc_config.set_mode;
 			break;
 		};
+
+		/* TODO: check in LUT for "stable" modes instead of hard-coding */
+		if (lc_state.mode == CONSTANT || lc_state.mode == TIME_DEPENDENT_COLORS || lc_state.mode == XMAS) {
+			lc_state.mode = lc_config.set_mode;
+		}
+
 
 		/* should never happen */
 		if (lc_state.brightness < 0) lc_state.brightness = lc_config.set_bright;
 
 		FastLED.setBrightness(lc_state.brightness);
-		if (lc_state.use_transient_color) {
-			refresh_leds(lc_state.transient_color);
-		} else {
-			refresh_leds(color_palette[lc_state.color_palette][lc_state.scheduled_color]);
+		if (XMAS != lc_state.mode) {
+			if (lc_state.use_transient_color) {
+				set_all_leds(lc_state.transient_color);
+			} else {
+				set_all_leds(color_palette[lc_state.color_palette][lc_state.scheduled_color]);
+			}
 		}
+		refresh_leds();
 
-		on_off_switch = gpio_get_level(GPIO_NUM_32);
+#ifdef HW_ONOFF_SWITCH
+		on_off_switch = gpio_get_level(HW_ONOFF_SWITCH);
+#else
+		on_off_switch = 1;
+#endif
 		if ((!on_off_switch && lc_state.on_off_switch)
 		    || (!lc_config.remote_onoff && lc_state.remote_onoff)) {
 			/* 1 -> 0 */
@@ -276,7 +319,9 @@ void house_keeper(void *arg) {
 
 	while (1) {
 		xQueueReceive(timer_queue, &ev, portMAX_DELAY);
-		if (ESP_ERR_WIFI_NOT_CONNECT == esp_wifi_sta_get_ap_info(&ap_info)) {
+		if (0 == wifi_init_in_progress &&
+		    s_retry_num == WIFI_MAXIMUM_RETRY &&
+		    ESP_ERR_WIFI_NOT_CONNECT == esp_wifi_sta_get_ap_info(&ap_info)) {
 			reinit_net();
 		} else if (schedule_netup_actions) {
 			netup_actions();
@@ -310,7 +355,11 @@ void init_lc(lc_state_t *lcs, lc_config_t *lcc) {
 	lcs->brightness = 0;
 	lcs->scheduled_color = 0;
 	lcs->color_palette = 0;
-	lcs->on_off_switch = gpio_get_level(GPIO_NUM_32);
+#ifdef HW_ONOFF_SWITCH
+	lcs->on_off_switch = gpio_get_level(HW_ONOFF_SWITCH);
+#else
+	lcs->on_off_switch = 1;
+#endif
 	lcs->remote_onoff = lcs->on_off_switch;
 	lcs->mode = lcs->on_off_switch ? CONSTANT : LIGHTS_OFF;
 
@@ -329,6 +378,11 @@ void init_lc(lc_state_t *lcs, lc_config_t *lcc) {
 		ESP_LOGW(LOGTAG_MISC, "failed opening nvs for loading");
 		return;
 	}
+
+	/* ledq */
+	ledq.led_state = (u_char *)calloc(1, NUM_LEDS);
+	ledq.num_leds = NUM_LEDS;
+	
 	/* config */
 	nvs_get_i32(nvsh_load, "mode", (int *)&(lcc->set_mode));
 	nvs_get_i32(nvsh_load, "set_bright", &(lcc->set_bright));
@@ -389,7 +443,18 @@ void nvs_lc_init() {
 
 
 void init_io() {
+#ifdef HW_ONOFF_SWITCH
 	gpio_set_direction(GPIO_NUM_32, GPIO_MODE_INPUT);
+#endif
+
+	gpio_config_t io_conf;
+	io_conf.intr_type = GPIO_INTR_DISABLE;
+	io_conf.mode = GPIO_MODE_OUTPUT;
+	io_conf.pin_bit_mask = ((1ULL<<DATA_PIN_0) | (1ULL<<DATA_PIN_1))
+;
+	io_conf.pull_down_en = GPIO_PULLDOWN_ENABLE;
+	io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+	gpio_config(&io_conf);
 }
 
 
@@ -398,13 +463,14 @@ void reinit_net() {
 	 * -> force reinit for debugging purposes a few seconds after start
 	 * and observe what happens
 	 */
+	wifi_init_in_progress = 1;
 	ESP_LOGI(LOGTAG_WIFI, "wifi reinit.");
 
 	ESP_ERROR_CHECK(esp_wifi_stop());
 	s_retry_num = 0;
-	tcpip_adapter_set_hostname(TCPIP_ADAPTER_IF_STA, MYHOSTNAME);
-	esp_event_handler_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler);
-	esp_event_handler_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler);
+	esp_netif_set_hostname(wifi_netif, MYHOSTNAME);
+	esp_event_handler_instance_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, inst_any_id);
+	esp_event_handler_instance_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, inst_got_ip);
 	esp_wifi_deinit();
 	vEventGroupDelete(s_wifi_event_group);
 
@@ -414,24 +480,26 @@ void reinit_net() {
 
 void init_net() {
 	wifi_config_t wifi_config;
+	memset(&wifi_config, 0, sizeof(wifi_config_t));
 
+	wifi_init_in_progress = 1;
 
 	/* Init WIFI */
 	s_wifi_event_group = xEventGroupCreate();
 
 	if (net_startup) {
-		tcpip_adapter_init();
+		esp_netif_init();
 		ESP_ERROR_CHECK(esp_event_loop_create_default());
+		wifi_netif = esp_netif_create_default_wifi_sta();
 	}
-
 
 	wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
 	cfg.nvs_enable = 0;
 
 	ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
-	ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler, NULL));
-	ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler, NULL));
+	ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler, NULL, &inst_any_id));
+	ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler, NULL, &inst_got_ip));
 
 	strcpy((char *)wifi_config.sta.ssid, WIFI_SSID);
 	strcpy((char *)wifi_config.sta.password, WIFI_PASS);
@@ -443,9 +511,10 @@ void init_net() {
 	ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
 	ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config));
 	ESP_ERROR_CHECK(esp_wifi_start());
-	tcpip_adapter_set_hostname(TCPIP_ADAPTER_IF_STA, MYHOSTNAME);
+	esp_netif_set_hostname(wifi_netif, MYHOSTNAME);
 
 	net_startup = 0;
+	wifi_init_in_progress = 0;
 
 	ESP_LOGI(LOGTAG_WIFI, "init_net finished.");
 }
@@ -512,6 +581,8 @@ void app_main() {
 	}
 	ESP_ERROR_CHECK(ret);
 
+	my_ip_str = (char *)malloc(my_ip_str_sz);
+
 	init_io();
 	init_net();
 	/* XXX: for some reason we have to init wifi
@@ -526,7 +597,7 @@ void app_main() {
 	start_rest_server(WEB_MOUNT_POINT, 0);
 
 	/* House Keeping - Core 0 */
-	xTaskCreatePinnedToCore(&house_keeper, "house_keeper", 2048, NULL, 4, NULL, 0);
+	xTaskCreatePinnedToCore(&house_keeper, "house_keeper", 4000, NULL, 4, NULL, 0);
 
 	/* Light Controller - Core 1 */
 	xTaskCreatePinnedToCore(&room_lights, "room_lights", 4000, NULL, 5, NULL, 1);
