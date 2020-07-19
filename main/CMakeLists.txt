@@ -2,11 +2,16 @@ include(GNUInstallDirs)
 
 execute_process(COMMAND sh "-c" "cat ../VERSION.txt | tr -d '\n'" OUTPUT_VARIABLE VERSION)
 
-idf_component_register(SRCS "main.cpp" "rest_server.cpp" "mode_xmas.cpp"
+idf_component_register(SRCS "main.cpp" "rest_server.cpp" "mode_power_up.cpp" "mode_xmas.cpp"
 			INCLUDE_DIRS "include"
 			REQUIRES FastLED-idf nvs_flash esp_http_server esp_http_client spiffs json)
 
 set_source_files_properties(mode_xmas.cpp
+			PROPERTIES COMPILE_FLAGS
+			-fpermissive
+)
+
+set_source_files_properties(mode_power_up.cpp
 			PROPERTIES COMPILE_FLAGS
 			-fpermissive
 )

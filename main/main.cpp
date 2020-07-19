@@ -1,5 +1,6 @@
 #include "alx.h"
 #include "alx_types.h"
+#include "mode_power_up.h"
 #include "local_settings.h"
 #include "driver/ledc.h"
 
@@ -54,6 +55,9 @@ const int my_ip_str_sz = 16;
 esp_event_handler_instance_t inst_any_id;
 esp_event_handler_instance_t inst_got_ip;
 int wifi_init_in_progress = 0;
+
+/* Modes */
+Mode_Power_Up *mode_power_up;
 
 
 extern "C" {
@@ -151,7 +155,9 @@ void room_lights(void *arg){
 			if (1 >= (lc_state.brightness = dim8_lin(lc_state.brightness))) lc_state.mode = LIGHTS_OFF;
 			break;
 		case LIGHTS_POWER_UP:
-			if (lc_config.set_bright <= ++lc_state.brightness) lc_state.mode = lc_config.set_mode;
+			if ((*mode_power_up)(lc_state.brightness, lc_config.set_bright)) {
+				lc_state.mode = lc_config.set_mode;
+			}
 			break;
 		case XMAS:
 			flying_lights(&ledq);
@@ -402,6 +408,9 @@ void init_lc(lc_state_t *lcs, lc_config_t *lcc) {
 	}
 
 	nvs_close(nvsh_load);
+
+	/* Modes */
+	mode_power_up = new Mode_Power_Up(50, 4);
 }
 
 
