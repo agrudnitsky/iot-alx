@@ -9,10 +9,10 @@
 
         <v-card class="mx-auto" min-width="350">
           Mode
-          <v-btn-toggle mandatory="true">
-            <v-btn v-on:click="set_mode(0)" v-bind:active="mode==0">Constant</v-btn>
-            <v-btn v-on:click="set_mode(6)" v-bind:active="mode==6">Time-Dependent</v-btn>
-            <v-btn v-on:click="set_mode(7)" v-bind:active="mode==7">XMas</v-btn>
+          <v-btn-toggle mandatory v-model="mode">
+            <v-btn v-on:click="set_mode(0)" value="0">Constant</v-btn>
+            <v-btn v-on:click="set_mode(6)" value="6">Time-Dependent</v-btn>
+            <v-btn v-on:click="set_mode(7)" value="7">XMas</v-btn>
           </v-btn-toggle>
 
         </v-card>
@@ -70,7 +70,7 @@ export default {
   name: 'app',
   data: () => ({
     version: process.env.VUE_APP_VERSION,
-    mode: 0,
+    mode: '7',
     brightness: 90,
     color_id: 0,
     remote_onoff: 1,
@@ -97,7 +97,7 @@ export default {
       this.axios
         .get('/api/v1/lc/getconfig')
         .then(response => {
-          this.mode = response.data.mode,
+          this.mode = response.data.mode.toString(),
           this.brightness = response.data.brightness,
           this.color_id = response.data.color,
           this.color_palette = response.data.color_palette,
