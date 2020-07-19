@@ -4,7 +4,7 @@
       Awesome Lights Xtreme - v.{{ version }}
     </v-app-bar>
 
-    <v-content>
+    <v-main>
       <v-container>
 
         <v-card class="mx-auto" min-width="350">
@@ -53,7 +53,7 @@
       </v-container>
 
       <photoshop-picker v-if="show_color_picker" v-model="color_definition" @cancel="color_picker_Cancel()" @ok="color_picker_OK()"/>
-    </v-content>
+    </v-main>
   </v-app>
 </template>
 
