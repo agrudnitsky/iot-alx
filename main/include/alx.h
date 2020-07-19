@@ -20,6 +20,7 @@
 #include <nvs_flash.h>
 #include <esp_spiffs.h>
 #include "esp_http_client.h"
+#include <esp_netif.h>
 
 #include <FastLED.h>
 
