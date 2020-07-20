@@ -1,5 +1,5 @@
-#ifndef _MODE_POWER_UP_H
-#define _MODE_POWER_UP_H
+#ifndef _MODE_POWER_UPDOWN_H
+#define _MODE_POWER_UPDOWN_H
 
 
 class Mode_Power_Up {
@@ -13,5 +13,18 @@ private:
 	int power_up_duration;
 	int stride;
 };
+
+
+class Mode_Power_Down {
+public:
+	Mode_Power_Down(int _st): tick(0), stride(_st) {}
+
+	bool operator()(int &b);
+
+private:
+	int tick;
+	int stride;
+};
+
 
 #endif

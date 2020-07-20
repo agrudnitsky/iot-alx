@@ -1,5 +1,5 @@
 #include "alx.h"
-#include "mode_power_up.h"
+#include "mode_power_updown.h"
 
 bool Mode_Power_Up::operator()(int &b, int max) {
 	if (tick < power_up_duration) {
