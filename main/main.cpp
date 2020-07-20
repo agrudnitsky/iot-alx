@@ -54,7 +54,6 @@ char *my_ip_str;
 const int my_ip_str_sz = 16;
 esp_event_handler_instance_t inst_any_id;
 esp_event_handler_instance_t inst_got_ip;
-int wifi_init_in_progress = 0;
 
 /* Modes */
 Mode_Power_Up *mode_power_up;
@@ -330,8 +329,7 @@ void house_keeper(void *arg) {
 
 	while (1) {
 		xQueueReceive(timer_queue, &ev, portMAX_DELAY);
-		if (0 == wifi_init_in_progress &&
-		    s_retry_num == WIFI_MAXIMUM_RETRY &&
+		if (s_retry_num == WIFI_MAXIMUM_RETRY &&
 		    ESP_ERR_WIFI_NOT_CONNECT == esp_wifi_sta_get_ap_info(&ap_info)) {
 			reinit_net();
 		} else if (schedule_netup_actions) {
@@ -478,7 +476,6 @@ void reinit_net() {
 	 * -> force reinit for debugging purposes a few seconds after start
 	 * and observe what happens
 	 */
-	wifi_init_in_progress = 1;
 	ESP_LOGI(LOGTAG_WIFI, "wifi reinit.");
 
 	ESP_ERROR_CHECK(esp_wifi_stop());
@@ -496,8 +493,6 @@ void reinit_net() {
 void init_net() {
 	wifi_config_t wifi_config;
 	memset(&wifi_config, 0, sizeof(wifi_config_t));
-
-	wifi_init_in_progress = 1;
 
 	/* Init WIFI */
 	s_wifi_event_group = xEventGroupCreate();
@@ -529,7 +524,6 @@ void init_net() {
 	esp_netif_set_hostname(wifi_netif, MYHOSTNAME);
 
 	net_startup = 0;
-	wifi_init_in_progress = 0;
 
 	ESP_LOGI(LOGTAG_WIFI, "init_net finished.");
 }
