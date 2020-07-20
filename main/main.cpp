@@ -2,6 +2,7 @@
 #include "alx_types.h"
 #include "mode_power_updown.h"
 #include "mode_xmas.h"
+#include "mode_constant.h"
 #include "local_settings.h"
 #include "driver/ledc.h"
 
@@ -60,7 +61,7 @@ esp_event_handler_instance_t inst_got_ip;
 Mode_Power_Up *mode_power_up;
 Mode_Power_Down *mode_power_down;
 Mode_XMAS *mode_xmas;
-
+Mode_Constant *mode_constant;
 
 extern "C" {
 	void app_main();
@@ -158,25 +159,23 @@ void room_lights(void *arg){
 			if ((*mode_power_up)(lc_state.brightness, lc_config.set_bright)) {
 				lc_state.mode = lc_config.set_mode;
 			}
-			
 			break;
 		case XMAS:
 			mode_xmas->flying_lights(&ledq);
 			break;
 		case CONSTANT:
-			lc_config.use_transient_color = 0;
-			/* fall through */
+			mode_constant->run(&ledq, &lc_config);
+			break;
 		case TIME_DEPENDENT_COLORS:
-			/* fall through */
+			set_all_leds(lc_state.transient_color);
+			break;
 		default:
-			lc_state.brightness = lc_config.set_bright;
-			lc_state.scheduled_color = lc_config.color;
-			lc_state.color_palette = lc_config.color_palette;
 			break;
 		};
 
 		/* TODO: check in LUT for "stable" modes instead of hard-coding */
 		if (lc_state.mode == CONSTANT || lc_state.mode == TIME_DEPENDENT_COLORS || lc_state.mode == XMAS) {
+			lc_state.brightness = lc_config.set_bright;
 			lc_state.mode = lc_config.set_mode;
 		}
 
@@ -185,13 +184,6 @@ void room_lights(void *arg){
 		if (lc_state.brightness < 0) lc_state.brightness = lc_config.set_bright;
 
 		FastLED.setBrightness(lc_state.brightness);
-		if (XMAS != lc_state.mode) {
-			if (lc_state.use_transient_color) {
-				set_all_leds(lc_state.transient_color);
-			} else {
-				set_all_leds(color_palette[lc_state.color_palette][lc_state.scheduled_color]);
-			}
-		}
 		refresh_leds();
 
 #ifdef HW_ONOFF_SWITCH
@@ -410,6 +402,7 @@ void init_lc(lc_state_t *lcs, lc_config_t *lcc) {
 	mode_power_up = new Mode_Power_Up(50, 4);
 	mode_power_down = new Mode_Power_Down(4);
 	mode_xmas = new Mode_XMAS();
+	mode_constant = new Mode_Constant();
 }
 
 
