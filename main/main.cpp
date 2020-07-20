@@ -153,7 +153,6 @@ void room_lights(void *arg){
 			if ((*mode_power_down)(lc_state.brightness)) {
 				lc_state.mode = LIGHTS_OFF;
 			}
-			ESP_LOGI(LOGTAG_LC, "b: %d", lc_state.brightness);
 			break;
 		case LIGHTS_POWER_UP:
 			if ((*mode_power_up)(lc_state.brightness, lc_config.set_bright)) {
