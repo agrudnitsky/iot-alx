@@ -230,9 +230,6 @@ void tdc_color_lookup() {
 	time_t now_ts;
 	struct tm *now;
 	int secs_past_mn;
-	int next_palette = lc_config.color_palette;
-	int next_color = lc_config.color;
-	int next_bright = lc_config.set_bright;
 	int last_tdc_id = -1;
 	int next_tdc_id = -1;
 	int tdc_distance = 0;
