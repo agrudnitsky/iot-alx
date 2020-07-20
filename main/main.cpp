@@ -160,7 +160,7 @@ void room_lights(void *arg){
 			}
 			break;
 		case XMAS:
-			mode_xmas->flying_lights(&ledq);
+			mode_xmas->run(&ledq);
 			break;
 		case CONSTANT:
 			mode_constant->run(&ledq, &lc_config);

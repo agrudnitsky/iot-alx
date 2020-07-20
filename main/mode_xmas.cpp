@@ -20,7 +20,7 @@ int Mode_XMAS::qsort_step(CHSV *l) {
 }
 
 
-void Mode_XMAS::flying_lights(ledq_t *q) {
+void Mode_XMAS::run(ledq_t *q) {
 	int i;
 	CHSV tmp_led;
 
