@@ -1,9 +1,13 @@
 #include "alx_types.h"
+#include "mode_xmas.h"
 
-CHSV pleds[NUM_LEDS];
-CHSV sleds[NUM_LEDS];
 
-void prepare_next_light(ledq_t *q) {
+uint32_t Mode_XMAS::rand_bounded(unsigned int bound) {
+	return esp_random() % bound;
+}
+
+
+void Mode_XMAS::prepare_next_light(ledq_t *q) {
 	CHSV new_col = CHSV(rand_bounded(256), 255, 255);
 	pleds[0] = new_col;
 
@@ -11,12 +15,12 @@ void prepare_next_light(ledq_t *q) {
 }
 
 
-int qsort_step(CHSV *l) {
+int Mode_XMAS::qsort_step(CHSV *l) {
 	return 1;
 }
 
 
-void flying_lights(ledq_t *q) {
+void Mode_XMAS::flying_lights(ledq_t *q) {
 	int i;
 	CHSV tmp_led;
 

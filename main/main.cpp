@@ -1,6 +1,7 @@
 #include "alx.h"
 #include "alx_types.h"
 #include "mode_power_updown.h"
+#include "mode_xmas.h"
 #include "local_settings.h"
 #include "driver/ledc.h"
 
@@ -58,6 +59,7 @@ esp_event_handler_instance_t inst_got_ip;
 /* Modes */
 Mode_Power_Up *mode_power_up;
 Mode_Power_Down *mode_power_down;
+Mode_XMAS *mode_xmas;
 
 
 extern "C" {
@@ -117,11 +119,6 @@ void IRAM_ATTR timer_group0_isr(void *par) {
 }
 
 
-uint32_t rand_bounded(unsigned int bound) {
-	return esp_random() % bound;
-}
-
-
 void set_all_leds(CRGB color) {
 	for(int i = 0; i < NUM_LEDS; i++) {
 		leds_0[i] = color;
@@ -164,7 +161,7 @@ void room_lights(void *arg){
 			
 			break;
 		case XMAS:
-			flying_lights(&ledq);
+			mode_xmas->flying_lights(&ledq);
 			break;
 		case CONSTANT:
 			lc_config.use_transient_color = 0;
@@ -412,6 +409,7 @@ void init_lc(lc_state_t *lcs, lc_config_t *lcc) {
 	/* Modes */
 	mode_power_up = new Mode_Power_Up(50, 4);
 	mode_power_down = new Mode_Power_Down(4);
+	mode_xmas = new Mode_XMAS();
 }
 
 
