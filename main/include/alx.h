@@ -53,13 +53,6 @@ typedef struct {
 	uint64_t counter_value;
 } timer_event_t;
 
-typedef struct {
-	int secs_past_mn;
-	int palette;
-	int color;
-	int brightness;
-} tdc_entry_t;
-
 
 
 

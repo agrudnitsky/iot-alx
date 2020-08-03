@@ -14,3 +14,8 @@ bool Mode_Power_Down::operator()(int &b) {
 		return false;
 	}
 }
+
+
+bool Mode_Power_Down::is_stable() {
+	return false;
+}

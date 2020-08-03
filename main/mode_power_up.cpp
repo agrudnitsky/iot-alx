@@ -16,3 +16,8 @@ bool Mode_Power_Up::operator()(int &b, int max) {
 		return true;
 	}
 }
+
+
+bool Mode_Power_Up::is_stable() {
+	return false;
+}

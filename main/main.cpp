@@ -3,6 +3,7 @@
 #include "mode_power_updown.h"
 #include "mode_xmas.h"
 #include "mode_constant.h"
+#include "mode_tdc.h"
 #include "local_settings.h"
 #include "driver/ledc.h"
 
@@ -31,24 +32,10 @@ static int schedule_netup_actions = 0;
 
 const char *version = VERSION;
 
-void (*mode_helper_fun[LC_LAST_MODE])();
-
 esp_http_client_config_t http_client_conf = {
 	.url = "http://www.google.com/",
 	.event_handler = _http_header_to_datetime,
 };
-
-
-/* format: secs past midnight, palette, color_id, brightness */
-tdc_entry_t time_colors[6] = {
-	{( 0*60 + 30)*60, 1, 0,  90},
-	{( 5*60 +  0)*60, 1, 1,  90},
-	{( 8*60 +  0)*60, 1, 2, 200},
-	{(12*60 + 30)*60, 1, 3, 240},
-	{(16*60 + 30)*60, 1, 4, 240},
-	{(21*60 + 30)*60, 1, 5, 140}
-};
-int num_time_colors = sizeof(time_colors)/sizeof(time_colors[0]);
 
 
 esp_netif_t *wifi_netif;
@@ -57,11 +44,8 @@ const int my_ip_str_sz = 16;
 esp_event_handler_instance_t inst_any_id;
 esp_event_handler_instance_t inst_got_ip;
 
-/* Modes */
-Mode_Power_Up *mode_power_up;
-Mode_Power_Down *mode_power_down;
-Mode_XMAS *mode_xmas;
-Mode_Constant *mode_constant;
+/* Mode */
+Mode_Base *mode[LC_LAST_MODE];
 
 extern "C" {
 	void app_main();
@@ -150,30 +134,30 @@ void room_lights(void *arg){
 			lc_state.brightness = 0;
 			break;
 		case LIGHTS_POWER_DOWN:
-			if ((*mode_power_down)(lc_state.brightness)) {
+			if ((*((Mode_Power_Down *)mode[LIGHTS_POWER_DOWN]))(lc_state.brightness)) {
 				lc_state.mode = LIGHTS_OFF;
 			}
 			break;
 		case LIGHTS_POWER_UP:
-			if ((*mode_power_up)(lc_state.brightness, lc_config.set_bright)) {
+			if ((*((Mode_Power_Up *)mode[LIGHTS_POWER_UP]))(lc_state.brightness, lc_config.set_bright)) {
 				lc_state.mode = lc_config.set_mode;
 			}
 			break;
 		case XMAS:
-			mode_xmas->run(&ledq);
+			mode[XMAS]->run(&ledq, &lc_config);
 			break;
 		case CONSTANT:
-			mode_constant->run(&ledq, &lc_config);
+			mode[CONSTANT]->run(&ledq, &lc_config);
 			break;
 		case TIME_DEPENDENT_COLORS:
-			set_all_leds(lc_state.transient_color);
+			mode[TIME_DEPENDENT_COLORS]->run(&ledq, &lc_config);
 			break;
 		default:
 			break;
 		};
 
 		/* TODO: check in LUT for "stable" modes instead of hard-coding */
-		if (lc_state.mode == CONSTANT || lc_state.mode == TIME_DEPENDENT_COLORS || lc_state.mode == XMAS) {
+		if (mode[lc_state.mode]->is_stable()) {
 			lc_state.brightness = lc_config.set_bright;
 			lc_state.mode = lc_config.set_mode;
 		}
@@ -209,60 +193,6 @@ void room_lights(void *arg){
 		}
 		lc_state.remote_onoff = lc_config.remote_onoff;
 	}
-}
-
-
-void tdc_color_lookup() {
-	int i;
-	struct timeval now_te;
-	time_t now_ts;
-	struct tm *now;
-	int secs_past_mn;
-	int last_tdc_id = -1;
-	int next_tdc_id = -1;
-	int tdc_distance = 0;
-	int secs_past_last_tdc;
-	int time_progress;
-
-	gettimeofday(&now_te, NULL);
-	now_ts = now_te.tv_sec;
-	now = localtime(&now_ts);
-	secs_past_mn = now->tm_hour*3600 + now->tm_min*60 + now->tm_sec;
-	ESP_LOGI(LOGTAG_MISC, "now: %d:%02d:%02d", now->tm_hour, now->tm_min, now->tm_sec);
-
-	for (i = 0; i < num_time_colors; ++i) {
-		if (secs_past_mn > time_colors[i].secs_past_mn) {
-			last_tdc_id = i;
-		}
-	}
-	if (-1 == last_tdc_id) last_tdc_id = num_time_colors-1;
-
-	if (last_tdc_id == num_time_colors-1) {
-		next_tdc_id = 0;
-		tdc_distance = 24*60*60;
-	} else {
-		next_tdc_id = last_tdc_id + 1;
-	}
-	tdc_distance += time_colors[next_tdc_id].secs_past_mn - time_colors[last_tdc_id].secs_past_mn;
-
-	secs_past_last_tdc = secs_past_mn - time_colors[last_tdc_id].secs_past_mn;
-	if (secs_past_mn < time_colors[last_tdc_id].secs_past_mn) secs_past_last_tdc += 24*60*60;
-	time_progress = (100*secs_past_last_tdc) / tdc_distance;
-
-	/* interpolate brightness */
-	lc_config.set_bright = time_colors[last_tdc_id].brightness + time_progress*(time_colors[next_tdc_id].brightness - time_colors[last_tdc_id].brightness)/100;
-
-	lc_config.color_palette = time_colors[last_tdc_id].palette;
-	lc_config.color = time_colors[last_tdc_id].color;
-
-	/* interpolate color */
-	/* XXX: not sure if we should do this in HSV
-	 * this would probably require all LED operations to be done in HSV, though
-	 */
-	lc_state.use_transient_color = 1;
-	lc_state.transient_color.red = color_palette[time_colors[last_tdc_id].palette][time_colors[last_tdc_id].color].red + time_progress*(color_palette[time_colors[next_tdc_id].palette][time_colors[next_tdc_id].color].red - color_palette[time_colors[last_tdc_id].palette][time_colors[last_tdc_id].color].red)/100;
-	lc_state.transient_color.green = color_palette[time_colors[last_tdc_id].palette][time_colors[last_tdc_id].color].green + time_progress*(color_palette[time_colors[next_tdc_id].palette][time_colors[next_tdc_id].color].green - color_palette[time_colors[last_tdc_id].palette][time_colors[last_tdc_id].color].green)/100;
-	lc_state.transient_color.blue = color_palette[time_colors[last_tdc_id].palette][time_colors[last_tdc_id].color].blue + time_progress*(color_palette[time_colors[next_tdc_id].palette][time_colors[next_tdc_id].color].blue - color_palette[time_colors[last_tdc_id].palette][time_colors[last_tdc_id].color].blue)/100;
 }
 
 
@@ -322,10 +252,7 @@ void house_keeper(void *arg) {
 			schedule_netup_actions = 0;
 		}
 
-		if (NULL != mode_helper_fun[lc_state.mode]) {
-			mode_helper_fun[lc_state.mode]();
-		}
-
+		mode[lc_config.set_mode]->helper();
 	}
 }
 
@@ -335,10 +262,6 @@ void init_lc(lc_state_t *lcs, lc_config_t *lcc) {
 	nvs_handle_t nvsh_load;
 	char key[11];
 	uint32_t colval;
-
-	/* mode helper functions */
-	for (i = 0; i < LC_LAST_MODE; ++i) mode_helper_fun[i] = NULL;
-	mode_helper_fun[TIME_DEPENDENT_COLORS] = tdc_color_lookup;
 
 	/* color palettes */
 	for (i = 0; i < num_color_palettes; ++i) {
@@ -398,10 +321,14 @@ void init_lc(lc_state_t *lcs, lc_config_t *lcc) {
 	nvs_close(nvsh_load);
 
 	/* Modes */
-	mode_power_up = new Mode_Power_Up(50, 4);
-	mode_power_down = new Mode_Power_Down(4);
-	mode_xmas = new Mode_XMAS();
-	mode_constant = new Mode_Constant();
+	mode[CONSTANT] = new Mode_Constant();
+	mode[LIGHTS_POWER_UP] = new Mode_Power_Up(50, 4);
+	mode[LIGHTS_POWER_DOWN] = new Mode_Power_Down(4);
+	mode[XMAS] = new Mode_XMAS();
+	mode[TIME_DEPENDENT_COLORS] = new Mode_TDC();
+	for (i = 0; i < LC_LAST_MODE; ++i) {
+		if (mode[i]) mode[i]->init();
+	}
 }
 
 

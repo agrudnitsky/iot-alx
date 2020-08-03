@@ -2,12 +2,13 @@
 #define _MODE_XMAS_H
 
 #include "alx_types.h"
+#include "mode_base.h"
 
-class Mode_XMAS {
+class Mode_XMAS: public Mode_Base {
 public:
 	Mode_XMAS() {}
 
-	void run(ledq_t *q);
+	void run(ledq_t *q, lc_config_t *lc_config);
 private:
 	void prepare_next_light(ledq_t *q);
 	uint32_t rand_bounded(unsigned int bound);
