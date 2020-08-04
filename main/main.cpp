@@ -156,12 +156,10 @@ void room_lights(void *arg){
 			break;
 		};
 
-		/* TODO: check in LUT for "stable" modes instead of hard-coding */
-		if (mode[lc_state.mode]->is_stable()) {
+		if (mode[lc_state.mode] && mode[lc_state.mode]->is_stable()) {
 			lc_state.brightness = lc_config.set_bright;
 			lc_state.mode = lc_config.set_mode;
 		}
-
 
 		/* should never happen */
 		if (lc_state.brightness < 0) lc_state.brightness = lc_config.set_bright;
