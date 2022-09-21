@@ -16,7 +16,7 @@
     "vue-color": "^2.7.1",
     "vue-icon-component": "^1.0.0",
     "vue-slider-component": "^3.2.2",
-    "vuetify": "^2.3.4",
+    "vuetify": "^2.6.10",
     "vuetify-loader": "^1.6.0"
   },
   "devDependencies": {
